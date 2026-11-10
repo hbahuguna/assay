@@ -132,6 +132,7 @@ A task is done only when all of the following are true:
 | Path | Responsibility |
 | --- | --- |
 | `harness/orchestrator.py` | Five-phase state machine, kill switch, resume, report finalization |
+| `harness/determinism.py` | Injectable clock and entropy providers for reproducible runs |
 | `harness/workflows.py` | Versioned workflow loader, phase-order validation, built-in fallback |
 | `harness/cli.py` | Machine-first CLI and exit codes |
 | `harness/checks.py` | Stable check catalog and intent-linked planning |

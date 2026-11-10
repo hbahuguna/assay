@@ -135,6 +135,32 @@ and ownership mismatches are rejected as blocked checks with the limitation
 recorded; the rest of the run continues. Browser plugin kinds are not supported
 yet. See `examples/plugins/README.md` and `examples/plugins/sample_check.py`.
 
+### Reproducible runs
+
+Production runs use real UTC time and UUID entropy. For deterministic reports,
+inject a seed and a frozen clock:
+
+```bash
+python -m harness run --target examples/sample-repo --no-browser \
+  --personas-dir personas \
+  --seed 1234 \
+  --clock-mode frozen \
+  --frozen-clock 2026-01-02T03:04:05Z \
+  --root .harness-demo
+```
+
+- `--seed` controls finding ids and the deterministic ordering of generated ids.
+- `--clock-mode frozen` with `--frozen-clock` controls every timestamp in state,
+  evidence, and the report.
+- `--generated-at` overrides only the report's `generated_at` value; it does not
+  change run timestamps.
+- The report records the `determinism` object with `seed`, `clock_mode`, and the
+  entropy mode (`uuid4` or `seeded`).
+
+Two runs with the same seed and frozen clock produce identical findings, ids,
+weights, phase details, and confidence breakdown. Omit both flags to keep
+production behavior.
+
 ### Live browser checks
 
 ```bash
@@ -155,6 +181,7 @@ the run continues with source evidence.
 ## What the report contains
 
 - `decision`: `ship`, `review`, or `hold`, with a rationale.
+- `determinism`: the seed, clock mode, and entropy mode used for the run.
 - `workflow`: id, name, version, and the canonical phase order that ran.
 - `confidence`: score, band, coverage, limitations, penalties, domain scores,
   formula breakdown, and gate reasons.
@@ -171,6 +198,7 @@ Example shape:
 {
   "schema_version": "quality-harness.report/v1",
   "status": "completed",
+  "determinism": {"seed": null, "clock_mode": "real", "entropy": "uuid4"},
   "decision": {"decision": "hold", "rationale": "..."},
   "confidence": {"score": 30.2, "band": "low", "gate": {"status": "fail"}},
   "findings": [{"severity": "high", "title": "..."}],

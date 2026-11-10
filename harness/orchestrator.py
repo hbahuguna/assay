@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import sys
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,6 +18,13 @@ from urllib.parse import urlsplit
 
 from .browser import BrowserCheckRunner, BrowserOptions
 from .checks import apply_risk_weights, plan_checks
+from .determinism import (
+    Determinism,
+    format_timestamp,
+    make_determinism,
+    reset_determinism,
+    set_determinism,
+)
 from .errors import HarnessError, PersonaError, StateError, TargetError
 from .evidence import EvidenceStore
 from .models import (
@@ -69,6 +75,10 @@ class RunOptions:
     kill_on: str = "critical"
     require_personas: int = 3
     verbose: bool = False
+    seed: Optional[int] = None
+    clock_mode: str = "real"
+    frozen_clock: object = None
+    generated_at: object = None
 
 
 class Orchestrator:
@@ -85,10 +95,23 @@ class Orchestrator:
         self.persona_map: Dict[str, Persona] = {}
         self.registry: Optional[CheckRegistry] = None
         self.workflow: Optional[Workflow] = None
+        self.determinism: Optional[Determinism] = None
         self._validate_options()
 
     # ------------------------------------------------------------------ public
     def run(self, resume: bool = False) -> RunState:
+        self.determinism = make_determinism(
+            seed=self.options.seed,
+            clock_mode=self.options.clock_mode,
+            frozen_clock=self.options.frozen_clock,
+        )
+        token = set_determinism(self.determinism)
+        try:
+            return self._run(resume)
+        finally:
+            reset_determinism(token)
+
+    def _run(self, resume: bool = False) -> RunState:
         self._load_registry()
         self._load_personas()
         target = self._resolve_target(self.options.target, self.options.source)
@@ -181,6 +204,11 @@ class Orchestrator:
                 raise ValueError
         except ValueError:
             raise HarnessError("viewport must look like 1440x900")
+        if self.options.generated_at:
+            try:
+                self.options.generated_at = format_timestamp(self.options.generated_at)
+            except ValueError as exc:
+                raise HarnessError("generated_at must be an ISO-8601 timestamp: {}".format(exc))
 
     def _load_registry(self) -> None:
         self.registry = build_registry(self.root, log=self.log)
@@ -279,8 +307,8 @@ class Orchestrator:
     def _new_state(self, target: Target) -> RunState:
         if self.workflow is None:
             self.workflow = self._resolve_workflow(self.options.workflow_id)
-        run_id = utc_now().replace("-", "").replace(":", "").replace("Z", "Z")
-        run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
+        assert self.determinism is not None
+        run_id = self.determinism.run_id()
         phases = [
             Phase(name=definition.name, title=definition.title)
             for definition in self.workflow.phases
@@ -301,8 +329,13 @@ class Orchestrator:
                 "kill_on": self.options.kill_on,
                 "selected_personas": list(self.options.selected_personas),
                 "source": target.source,
+                "seed": self.options.seed,
+                "clock_mode": self.options.clock_mode,
+                "generated_at": self.options.generated_at,
             },
             kill_switch=KillSwitch(armed=True, threshold=self.options.kill_on),
+            seed=self.options.seed,
+            clock_mode=self.options.clock_mode,
         )
         state.personas = [self._public_persona(persona) for persona in self.personas]
         state.evidence_dir = str(Path(".harness") / "evidence" / run_id)
@@ -792,6 +825,10 @@ class Orchestrator:
             },
             "findings": len(self.state.findings),
             "kill_switch": self.state.kill_switch.to_dict(),
+            "determinism": {
+                "seed": self.state.seed,
+                "clock_mode": self.state.clock_mode,
+            },
         }
         manifest = self.evidence.finalize(metadata)
         summary = manifest.get("summary", {})
@@ -864,7 +901,13 @@ class Orchestrator:
         self.state.touch()
         self.state_store.save(self.state)
         assert self.evidence is not None and self.workflow is not None
-        report = build_report(self.state, self.workflow, self.evidence.summary())
+        generated_at = self.options.generated_at or self.state.options.get("generated_at")
+        report = build_report(
+            self.state,
+            self.workflow,
+            self.evidence.summary(),
+            generated_at=str(generated_at) if generated_at else None,
+        )
         self.state_store.save_report(report)
         self.state_store.append_event(
             {

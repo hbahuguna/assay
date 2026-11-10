@@ -87,6 +87,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit 1 when a finding at or above this severity exists.",
     )
     run.add_argument("--min-score", type=int, default=None, help="Exit 1 when confidence is below this score.")
+    run.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed for deterministic finding ids and ordering.",
+    )
+    run.add_argument(
+        "--clock-mode",
+        choices=["real", "frozen"],
+        default="real",
+        help="Clock provider for the run (default: real UTC).",
+    )
+    run.add_argument(
+        "--frozen-clock",
+        help="ISO-8601 timestamp used when --clock-mode=frozen.",
+    )
+    run.add_argument(
+        "--generated-at",
+        help="Override the report generated_at timestamp with an ISO-8601 value.",
+    )
     run.add_argument("--resume", action="store_true", help="Resume the last incomplete run.")
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
@@ -126,6 +146,10 @@ def _run(args: argparse.Namespace) -> int:
         viewport=args.viewport,
         kill_on=args.kill_on,
         require_personas=3,
+        seed=args.seed,
+        clock_mode=args.clock_mode,
+        frozen_clock=args.frozen_clock,
+        generated_at=args.generated_at,
     )
 
     def log(message: str) -> None:

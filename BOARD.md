@@ -55,6 +55,7 @@ ordering, budget, and report bytes do not depend on an LLM or wall-clock luck.
 | S1.4 | Two runs over the same inputs produce the same report body | QH-004 |
 | S1.5 | Operators can find, compare, and expire historical runs | QH-005 |
 | S1.6 | Resume rejects a changed plugin registry | QH-035 |
+| S1.7 | A seeded resume continues the id sequence without collisions | QH-036 |
 
 ### E2: Specialist Persona Layer
 
@@ -136,23 +137,6 @@ into a false release signal.
 | S7.4 | State, evidence, and the kill switch survive injected failures | QH-034 |
 
 ## Ready
-
-### QH-004 - Inject seed and clock for reproducible reports
-
-- **Epic:** E1 Deterministic Core Engine
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-001
-- **Status:** Ready
-- **Description:** Route random ids, timestamps, and ordering through injectable
-  seed and clock providers so a fixed-seed run produces the same report body
-  except for an explicit `generated_at` override.
-- **Acceptance Criteria:**
-  - Two runs with the same seed and a frozen clock produce identical findings,
-    ids, weights, and confidence breakdown.
-  - The report records the seed and clock mode used.
-  - Production defaults still use real UTC time and UUID entropy.
-  - A regression test compares two normalized reports byte for byte.
 
 ### QH-005 - Add a run history index and retention policy
 
@@ -677,10 +661,31 @@ into a false release signal.
   - Tests cover a plugin added between runs, a plugin removed between runs, and a
     plugin whose trust key was rotated.
 
+### QH-036 - Continue seeded id sequences across resume
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-004
+- **Status:** Ready
+- **Description:** Persist the seeded id sequence position and the determinism
+  options with the run and restore them on resume so a resumed deterministic run
+  cannot reuse a finding id or mix clocks and seeds.
+- **Acceptance Criteria:**
+  - A resumed seeded run continues the deterministic id sequence from the saved
+    position instead of restarting it.
+  - Resume with a different seed or clock mode either restores the saved options
+    or fails with a typed `StateError`.
+  - Existing finding ids and evidence remain byte-identical after resume.
+  - The progress and report record the sequence position or a resume-specific
+    entropy salt.
+  - Tests cover resume after partial execution and compare ids with a fresh
+    same-seed run.
+
 ## In Progress
 
-No task is claimed. `QH-001`, `QH-002`, and `QH-003` are complete, so `QH-004` is
-now the lowest-numbered unblocked task. `QH-019` remains the first
+No task is claimed. `QH-001` through `QH-004` are complete, so `QH-005` is now
+the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task, and `QH-010` can proceed in parallel because it has
 no dependency.
 
@@ -772,6 +777,30 @@ no dependency.
   suite: 56 passing tests with Python 3.11. Plugin contract documented in
   `README.md` and `examples/plugins/README.md`.
 
+### QH-004 - Inject seed and clock for reproducible reports
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-001
+- **Status:** Done
+- **Completed:** 2026-11-10
+- **Description:** Added injectable clock and entropy providers behind the
+  existing `utc_now` and `new_id` call sites. A run can use a seeded id
+  sequence and/or a frozen clock; production defaults remain real UTC time and
+  UUID entropy.
+- **Acceptance Criteria:**
+  - Two runs with the same seed and a frozen clock produce identical findings,
+    ids, weights, and confidence breakdown.
+  - The report records the seed and clock mode used.
+  - Production defaults still use real UTC time and UUID entropy.
+  - A regression test compares two normalized reports byte for byte.
+- **Evidence:** `tests/test_determinism.py` covers the deterministic provider,
+  context-scoped `utc_now`/`new_id`, production defaults, invalid options,
+  state round-tripping, two frozen/seeded runs compared byte for byte, and a
+  `generated_at` override, and CLI flag wiring. Full suite: 65 passing tests
+  with Python 3.11. CLI flags and behavior documented in `README.md`.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -809,3 +838,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D11 | 2026-11-10 | Workflow overrides use a constrained, dependency-free YAML subset and are strict about phase order. | Adding PyYAML would break the dependency-free OSS core, while silently ignoring a malformed override could run the wrong phase contract. | Expand the parser only when a real workflow field requires it; keep unknown phases and fields as errors. |
 | D12 | 2026-11-10 | Evidence is checkpointed atomically after each completed check, before progress state, and reconciled on resume. | Progress and manifest are separate files; ordering the evidence write first plus reconciliation prevents a completed check from losing its artifacts, while stale entries from a crashed check are discarded. | Revisit if state and evidence move into a single transactional store. |
 | D13 | 2026-11-10 | Built-in and installed checks share a registry; plugins use signed `quality_harness.checks` entry points and a project-local HMAC trust store. | The dependency-free core cannot bundle a public-key library, while symmetric signatures still let an operator pin trusted plugin publishers. Load, signature, and ownership failures are blocked coverage gaps rather than run failures. | Replace HMAC with a public-key scheme when an optional plugin-signing extra or package verifier exists. |
+| D14 | 2026-11-10 | Clock and entropy are context-scoped providers; seeded runs use SHA-256 based id generation and an optional frozen clock. | Existing `utc_now`/`new_id` call sites stay intact, production defaults remain real UTC and UUID entropy, and seeded runs can reproduce report bytes without patching every module. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent determinism. |

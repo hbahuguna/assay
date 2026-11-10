@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .models import CheckStatus, RunState, Severity, severity_rank, utc_now
 from .workflows import Workflow
@@ -70,7 +70,12 @@ def _decision(state: RunState) -> Dict[str, str]:
     }
 
 
-def build_report(state: RunState, workflow: Workflow, evidence_summary: Dict[str, Any]) -> Dict[str, Any]:
+def build_report(
+    state: RunState,
+    workflow: Workflow,
+    evidence_summary: Dict[str, Any],
+    generated_at: Optional[str] = None,
+) -> Dict[str, Any]:
     findings = sorted(
         state.findings,
         key=lambda item: (-severity_rank(item.severity), item.created_at, item.id),
@@ -116,8 +121,13 @@ def build_report(state: RunState, workflow: Workflow, evidence_summary: Dict[str
 
     return {
         "schema_version": REPORT_SCHEMA,
-        "generated_at": utc_now(),
+        "generated_at": generated_at or utc_now(),
         "run_id": state.run_id,
+        "determinism": {
+            "seed": state.seed,
+            "clock_mode": state.clock_mode,
+            "entropy": "seeded" if state.seed is not None else "uuid4",
+        },
         "status": state.status,
         "workflow": {
             "id": workflow.id,

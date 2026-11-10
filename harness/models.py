@@ -8,25 +8,24 @@ or a report without importing the harness.
 from __future__ import annotations
 
 import dataclasses
-import datetime
 import enum
-import uuid
 from typing import Any, Dict, List, Optional
+
+from .determinism import new_id as _new_id
+from .determinism import now as _now
 
 
 SCHEMA_VERSION = "1.0"
 
 
 def utc_now() -> str:
-    """Return an ISO-8601 UTC timestamp with a trailing Z."""
+    """Return the active clock's ISO-8601 UTC timestamp with a trailing Z."""
 
-    return datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00", "Z"
-    )
+    return _now()
 
 
 def new_id(prefix: str) -> str:
-    return "{}-{}".format(prefix, uuid.uuid4().hex[:10])
+    return _new_id(prefix)
 
 
 class RunStatus(str, enum.Enum):
@@ -338,6 +337,8 @@ class RunState:
     completed_at: Optional[str] = None
     halted_reason: str = ""
     error: str = ""
+    seed: Optional[int] = None
+    clock_mode: str = "real"
     schema_version: str = SCHEMA_VERSION
 
     def to_dict(self) -> Dict[str, Any]:
@@ -365,6 +366,8 @@ class RunState:
             "completed_at": self.completed_at,
             "halted_reason": self.halted_reason,
             "error": self.error,
+            "seed": self.seed,
+            "clock_mode": self.clock_mode,
         }
 
     @classmethod
@@ -392,6 +395,8 @@ class RunState:
             completed_at=data.get("completed_at"),
             halted_reason=data.get("halted_reason", ""),
             error=data.get("error", ""),
+            seed=data.get("seed"),
+            clock_mode=data.get("clock_mode", "real"),
             schema_version=data.get("schema_version", SCHEMA_VERSION),
         )
 
