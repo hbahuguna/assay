@@ -41,6 +41,9 @@ deterministic OSS core, not a bespoke services engagement.
   run automatically.
 - The OSS core must remain dependency-free. Optional browser and cloud behavior
   loads behind explicit extras or feature flags.
+- Installed check plugins must be signed and owned by exactly one persona. A
+  plugin that cannot be loaded or verified is a blocked check, never a pass and
+  never a reason to fail the whole run.
 - No UI in the OSS core. Onboarding and usage APIs are allowed; a dashboard is a
   separate product decision.
 - Persona checks must be disjoint. A check owned by zero personas, or by more
@@ -132,6 +135,7 @@ A task is done only when all of the following are true:
 | `harness/workflows.py` | Versioned workflow loader, phase-order validation, built-in fallback |
 | `harness/cli.py` | Machine-first CLI and exit codes |
 | `harness/checks.py` | Stable check catalog and intent-linked planning |
+| `harness/plugins.py` | Signed entry-point registry, plugin context, and blocked-failure handling |
 | `harness/personas.py` | Frontmatter parsing and output-schema validation |
 | `harness/static_analysis.py` | Source inventory and deterministic Inspect checks |
 | `harness/browser.py` | Optional Playwright Operate layer and evidence capture |

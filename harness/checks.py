@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
 from .errors import HarnessError
-from .models import Check, CheckStatus, Risk, Target
+from .models import Check, CheckStatus, Risk, Target, utc_now
 from .personas import Persona
 
 
@@ -181,7 +181,9 @@ CHECK_CATALOG: List[CheckDefinition] = [
 ]
 
 
-def catalog_ids() -> List[str]:
+def catalog_ids(registry: Optional[Any] = None) -> List[str]:
+    if registry is not None:
+        return list(registry.ids())
     return [definition.id for definition in CHECK_CATALOG]
 
 
@@ -206,14 +208,19 @@ def plan_checks(
     personas: Iterable[Persona],
     max_checks: int,
     no_browser: bool = False,
+    registry: Optional[Any] = None,
 ) -> List[Check]:
     selected = {persona.id for persona in personas}
+    definitions = registry.definitions if registry is not None else CHECK_CATALOG
     checks: List[Check] = []
-    for definition in CHECK_CATALOG:
+    for definition in definitions:
         if definition.persona not in selected:
             continue
         if not _applicable(definition, inventory, target, no_browser):
             continue
+        blocked_reason = (
+            registry.blocked_reason(definition.id) if registry is not None else ""
+        )
         checks.append(
             Check(
                 id=definition.id,
@@ -225,7 +232,14 @@ def plan_checks(
                 expected=definition.expected,
                 base_weight=definition.base_weight,
                 weight=definition.base_weight,
-                status=CheckStatus.PLANNED.value,
+                status=(
+                    CheckStatus.BLOCKED.value
+                    if blocked_reason
+                    else CheckStatus.PLANNED.value
+                ),
+                actual=blocked_reason,
+                skip_reason=blocked_reason,
+                completed_at=utc_now() if blocked_reason else None,
             )
         )
     if not checks:

@@ -105,6 +105,36 @@ a crashed check is discarded before that check reruns. Resume is rejected when
 the target or workflow version differs from the saved run. A run halted by the
 kill switch cannot be resumed; start a new run after investigating.
 
+### Check plugins
+
+Built-in checks and installed plugins are discovered through the same
+`CheckRegistry`. A plugin package exposes a `CheckPlugin` from the
+`quality_harness.checks` entry-point group. Its definition declares the check
+id, kind, required input, base weight, owning persona, intent, and expected
+outcome; its evaluator receives a `PluginContext` with the target inventory and
+the run's evidence store.
+
+Plugins are signed with HMAC-SHA256 over the canonical definition and entry-point
+value. The trust store stays outside source control:
+
+```json
+{
+  "keys": {
+    "example-key": "replace-with-a-random-secret"
+  }
+}
+```
+
+Write it to `.harness/plugins/trusted_keys.json` with mode `0600`, sign the entry
+point with `harness.plugins.sign_plugin`, and put the returned
+`hmac-sha256:<key_id>:<digest>` value in `CheckPlugin.signature`.
+
+A plugin check must be listed by exactly its declared persona. Duplicate ids,
+unknown input requirements, zero weights, unsigned packages, import failures,
+and ownership mismatches are rejected as blocked checks with the limitation
+recorded; the rest of the run continues. Browser plugin kinds are not supported
+yet. See `examples/plugins/README.md` and `examples/plugins/sample_check.py`.
+
 ### Live browser checks
 
 ```bash
@@ -214,11 +244,12 @@ schema, and refusal handling. See `personas/README.md`.
 ## Repository layout
 
 ```text
-harness/            Core engine, CLI, checks, evidence, scoring, browser layer
+harness/            Core engine, CLI, checks, plugins, evidence, scoring, browser layer
 personas/           Specialist Markdown contracts
 tests/              Unit and end-to-end tests (unittest compatible)
 examples/sample-repo/  Static fixture with a high, medium, and low finding
 examples/demo-web/  Clean page for manual browser runs
+examples/plugins/   Signed sample check plugin and signing instructions
 BOARD.md            Epics, ready tasks, blockers, decisions
 AGENTS.md           Contract for coding agents working this board
 ```

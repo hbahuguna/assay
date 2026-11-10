@@ -54,6 +54,7 @@ ordering, budget, and report bytes do not depend on an LLM or wall-clock luck.
 | S1.3 | New checks are installable without editing the orchestrator | QH-003 |
 | S1.4 | Two runs over the same inputs produce the same report body | QH-004 |
 | S1.5 | Operators can find, compare, and expire historical runs | QH-005 |
+| S1.6 | Resume rejects a changed plugin registry | QH-035 |
 
 ### E2: Specialist Persona Layer
 
@@ -135,24 +136,6 @@ into a false release signal.
 | S7.4 | State, evidence, and the kill switch survive injected failures | QH-034 |
 
 ## Ready
-
-### QH-003 - Add a plugin check registry with signed entry points
-
-- **Epic:** E1 Deterministic Core Engine
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-001
-- **Status:** Ready
-- **Description:** Move check discovery behind a registry that supports
-  first-party and installed plugins. A plugin declares its id, kind, required
-  input, weight, and evaluator; the orchestrator rejects duplicates and unsigned
-  packages.
-- **Acceptance Criteria:**
-  - Built-in checks are discovered through the same registry as plugins.
-  - Duplicate ids, unknown input requirements, and weight zero are rejected.
-  - A sample plugin can add a check without modifying `orchestrator.py`.
-  - Plugin load failures become a blocked check with a clear limitation, not a
-    failed run.
 
 ### QH-004 - Inject seed and clock for reproducible reports
 
@@ -674,11 +657,32 @@ into a false release signal.
   - Kill during evidence collection still writes a hold report with the failure.
   - Each injected failure has a deterministic test and a documented recovery.
 
+### QH-035 - Guard resume against a changed plugin registry
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-003
+- **Status:** Ready
+- **Description:** Persist a plugin-registry fingerprint (check ids, sources,
+  signatures/evaluator availability, and trust key ids) with the run and reject
+  resume when the registry has changed, so a pending check cannot be replayed
+  against a different evaluator or a plugin that is no longer trusted.
+- **Acceptance Criteria:**
+  - Resume with an added, removed, re-signed, or re-evaluated plugin fails with a
+    typed `StateError` before replay.
+  - Completed checks and their evidence remain byte-identical after the failed
+    resume attempt.
+  - The progress and report record the registry fingerprint used by the run.
+  - Tests cover a plugin added between runs, a plugin removed between runs, and a
+    plugin whose trust key was rotated.
+
 ## In Progress
 
-No task is claimed. `QH-001` and `QH-002` are complete, so `QH-003` is now the
-lowest-numbered unblocked task. `QH-019` remains the first commercial-critical-path
-task, and `QH-010` can proceed in parallel because it has no dependency.
+No task is claimed. `QH-001`, `QH-002`, and `QH-003` are complete, so `QH-004` is
+now the lowest-numbered unblocked task. `QH-019` remains the first
+commercial-critical-path task, and `QH-010` can proceed in parallel because it has
+no dependency.
 
 ## Blockers
 
@@ -742,6 +746,32 @@ task, and `QH-010` can proceed in parallel because it has no dependency.
   the target-mismatch error. Full suite: 47 passing tests with Python 3.11.
   User-facing behavior documented in `README.md`.
 
+### QH-003 - Add a plugin check registry with signed entry points
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-001
+- **Status:** Done
+- **Completed:** 2026-11-10
+- **Description:** Moved built-in and installed check discovery behind one
+  `CheckRegistry`. Signed `quality_harness.checks` entry points declare a check
+  definition and evaluator; plugins are verified with HMAC-SHA256 against a
+  project-local trust store, must be owned by exactly one persona, and execute
+  through a bounded `PluginContext`.
+- **Acceptance Criteria:**
+  - Built-in checks are discovered through the same registry as plugins.
+  - Duplicate ids, unknown input requirements, and weight zero are rejected.
+  - A sample plugin can add a check without modifying `orchestrator.py`.
+  - Plugin load failures become a blocked check with a clear limitation, not a
+    failed run.
+- **Evidence:** `tests/test_plugins.py` verifies the shared built-in registry,
+  all three validation rejections, unsigned and invalid signatures, persona
+  ownership, end-to-end execution of `examples/plugins/sample_check.py`, and an
+  import failure that becomes a blocked check while the run completes. Full
+  suite: 56 passing tests with Python 3.11. Plugin contract documented in
+  `README.md` and `examples/plugins/README.md`.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -778,3 +808,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D10 | 2026-11-10 | All board tasks start in `Ready`; no task is claimed by documentation alone. | A card is a promise of acceptance criteria, not proof of work. | Move a card only when a test or artifact proves it. |
 | D11 | 2026-11-10 | Workflow overrides use a constrained, dependency-free YAML subset and are strict about phase order. | Adding PyYAML would break the dependency-free OSS core, while silently ignoring a malformed override could run the wrong phase contract. | Expand the parser only when a real workflow field requires it; keep unknown phases and fields as errors. |
 | D12 | 2026-11-10 | Evidence is checkpointed atomically after each completed check, before progress state, and reconciled on resume. | Progress and manifest are separate files; ordering the evidence write first plus reconciliation prevents a completed check from losing its artifacts, while stale entries from a crashed check are discarded. | Revisit if state and evidence move into a single transactional store. |
+| D13 | 2026-11-10 | Built-in and installed checks share a registry; plugins use signed `quality_harness.checks` entry points and a project-local HMAC trust store. | The dependency-free core cannot bundle a public-key library, while symmetric signatures still let an operator pin trusted plugin publishers. Load, signature, and ownership failures are blocked coverage gaps rather than run failures. | Replace HMAC with a public-key scheme when an optional plugin-signing extra or package verifier exists. |

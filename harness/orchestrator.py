@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlsplit
 
 from .browser import BrowserCheckRunner, BrowserOptions
-from .checks import apply_risk_weights, catalog_ids, plan_checks
+from .checks import apply_risk_weights, plan_checks
 from .errors import HarnessError, PersonaError, StateError, TargetError
 from .evidence import EvidenceStore
 from .models import (
@@ -38,7 +38,14 @@ from .models import (
     utc_now,
 )
 from .outcomes import CheckOutcome
-from .personas import Persona, load_personas, validate_payload, validate_persona_checks
+from .personas import (
+    Persona,
+    load_personas,
+    unknown_persona_check_ids,
+    validate_payload,
+    validate_persona_checks,
+)
+from .plugins import CheckRegistry, PluginCheckRunner, build_registry
 from .report import build_report
 from .risk import RiskAnalyzer
 from .scoring import score_confidence
@@ -76,11 +83,13 @@ class Orchestrator:
         self.evidence: Optional[EvidenceStore] = None
         self.personas: List[Persona] = []
         self.persona_map: Dict[str, Persona] = {}
+        self.registry: Optional[CheckRegistry] = None
         self.workflow: Optional[Workflow] = None
         self._validate_options()
 
     # ------------------------------------------------------------------ public
     def run(self, resume: bool = False) -> RunState:
+        self._load_registry()
         self._load_personas()
         target = self._resolve_target(self.options.target, self.options.source)
         if resume:
@@ -173,7 +182,19 @@ class Orchestrator:
         except ValueError:
             raise HarnessError("viewport must look like 1440x900")
 
+    def _load_registry(self) -> None:
+        self.registry = build_registry(self.root, log=self.log)
+        self.log(
+            "Loaded check registry: {} built-in, {} plugin, {} blocked.".format(
+                self.registry.builtin_count(),
+                self.registry.plugin_count(),
+                self.registry.blocked_count(),
+            )
+        )
+
     def _load_personas(self) -> None:
+        if self.registry is None:
+            raise HarnessError("Check registry was not loaded before personas.")
         personas_dir = Path(self.options.personas_dir).expanduser()
         if not personas_dir.is_absolute():
             cwd_candidate = Path.cwd() / personas_dir
@@ -184,7 +205,28 @@ class Orchestrator:
             selected=self.options.selected_personas or None,
             require_minimum=self.options.require_personas,
         )
-        validate_persona_checks(self.personas, catalog_ids())
+        unknown = unknown_persona_check_ids(self.personas, self.registry.ids())
+        if unknown and self.registry.has_plugin_failures():
+            persona_map = {persona.id: persona for persona in self.personas}
+            owners: Dict[str, List[str]] = {}
+            for persona_id, check_id in unknown:
+                owners.setdefault(check_id, []).append(persona_id)
+            for check_id, persona_ids in sorted(owners.items()):
+                persona = persona_map.get(persona_ids[0])
+                domain = persona.domains[0] if persona and persona.domains else "functional"
+                self.registry.block_missing_plugin_check(
+                    check_id,
+                    persona_ids[0],
+                    domain,
+                    "Plugin check '{}' is declared by persona(s) {} but the plugin "
+                    "failed to load or verify.".format(
+                        check_id, ", ".join(persona_ids)
+                    ),
+                )
+        validate_persona_checks(self.personas, self.registry.ids())
+        self.registry.validate_ownership(
+            self.personas, selected_only=bool(self.options.selected_personas)
+        )
         self.persona_map = {persona.id: persona for persona in self.personas}
         self.log(
             "Loaded personas: {}".format(", ".join(persona.id for persona in self.personas))
@@ -407,6 +449,7 @@ class Orchestrator:
             self.personas,
             self.options.max_checks,
             self.options.no_browser,
+            registry=self.registry,
         )
         apply_risk_weights(checks, self.state.risks)
         self.state.checks = checks
@@ -415,8 +458,11 @@ class Orchestrator:
         for check in checks:
             by_kind[check.kind] = by_kind.get(check.kind, 0) + 1
             by_persona[check.persona] = by_persona.get(check.persona, 0) + 1
-        summary = "{} check(s) planned: {} static, {} browser.".format(
-            len(checks), by_kind.get("static", 0), by_kind.get("browser", 0)
+        summary = "{} check(s) planned: {} static, {} browser, {} plugin.".format(
+            len(checks),
+            by_kind.get("static", 0),
+            by_kind.get("browser", 0),
+            by_kind.get("plugin", 0),
         )
         self._finish_phase(
             phase,
@@ -437,49 +483,75 @@ class Orchestrator:
             )
             return
 
-        static_checks = [
+        terminal = (
+            CheckStatus.PASSED.value,
+            CheckStatus.FAILED.value,
+            CheckStatus.BLOCKED.value,
+            CheckStatus.SKIPPED.value,
+        )
+        serial_checks = [
             check
             for check in self.state.checks
-            if check.kind == "static"
-            and check.status
-            not in (
-                CheckStatus.PASSED.value,
-                CheckStatus.FAILED.value,
-                CheckStatus.BLOCKED.value,
-                CheckStatus.SKIPPED.value,
-            )
+            if check.kind != "browser" and check.status not in terminal
         ]
-        if static_checks:
-            if self.state.target.source:
-                runner = StaticCheckRunner(
-                    Path(self.state.target.source),
-                    Inventory.from_dict(self.state.inventory),
+        if serial_checks:
+            inventory = (
+                Inventory.from_dict(self.state.inventory)
+                if self.state.inventory
+                else Inventory(False, "")
+            )
+            source_root = (
+                Path(self.state.target.source) if self.state.target.source else None
+            )
+            static_runner = (
+                StaticCheckRunner(
+                    source_root,
+                    inventory,
                     self.evidence,  # type: ignore[arg-type]
                 )
-                for check in static_checks:
-                    if self.state.kill_switch.triggered:
-                        break
-                    manual = self.state_store.kill_request()
-                    if manual:
-                        self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
-                        break
-                    check.status = CheckStatus.RUNNING.value
-                    check.started_at = utc_now()
-                    self.state_store.save(self.state)
-                    outcome = runner.run(check)
-                    halt = self._record_outcome(check, outcome)
-                    if halt:
-                        break
-            else:
-                for check in static_checks:
-                    self._record_outcome(
-                        check,
-                        CheckOutcome(
-                            status=CheckStatus.BLOCKED.value,
-                            actual="No source directory was available for static inspection.",
-                            metadata={"limitation": "Static inspection was not available for this run."},
-                        ),
+                if source_root is not None
+                else None
+            )
+            plugin_runner = PluginCheckRunner(
+                self.state.target,
+                source_root,
+                inventory,
+                self.evidence,  # type: ignore[arg-type]
+                self.log,
+            )
+            for check in serial_checks:
+                if self.state.kill_switch.triggered:
+                    break
+                manual = self.state_store.kill_request()
+                if manual:
+                    self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
+                    break
+                check.status = CheckStatus.RUNNING.value
+                check.started_at = utc_now()
+                self.state_store.save(self.state)
+                evaluator = (
+                    self.registry.evaluator(check.id) if self.registry is not None else None
+                )
+                if evaluator is not None:
+                    outcome = plugin_runner.run(check, evaluator)
+                elif check.kind == "static" and static_runner is not None:
+                    outcome = static_runner.run(check)
+                elif check.kind == "static":
+                    outcome = CheckOutcome(
+                        status=CheckStatus.BLOCKED.value,
+                        actual="No source directory was available for static inspection.",
+                        metadata={
+                            "limitation": "Static inspection was not available for this run."
+                        },
                     )
+                else:
+                    outcome = CheckOutcome(
+                        status=CheckStatus.ERROR.value,
+                        actual="No runner is registered for check '{}'.".format(check.id),
+                    )
+                halt = self._record_outcome(check, outcome)
+                if halt:
+                    break
 
         if not self.state.kill_switch.triggered:
             manual = self.state_store.kill_request()

@@ -190,7 +190,7 @@ class Check:
     title: str
     domain: str
     persona: str
-    kind: str  # "static" | "browser"
+    kind: str  # "static" | "browser" | "plugin"
     intent: str
     expected: str
     base_weight: float

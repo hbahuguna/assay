@@ -29,3 +29,7 @@ class BrowserUnavailable(HarnessError):
 
 class CheckError(HarnessError):
     pass
+
+
+class PluginError(CheckError):
+    pass

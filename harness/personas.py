@@ -11,7 +11,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .errors import PersonaError
 
@@ -279,13 +279,27 @@ def validate_payload(payload: Any, schema: Dict[str, Any], path: str = "$") -> L
     return errors
 
 
-def validate_persona_checks(personas: Iterable[Persona], known_check_ids: Iterable[str]) -> None:
+def unknown_persona_check_ids(
+    personas: Iterable[Persona], known_check_ids: Iterable[str]
+) -> List[Tuple[str, str]]:
+    """Return (persona id, unknown check id) pairs in deterministic order."""
+
     known = set(known_check_ids)
+    missing: List[Tuple[str, str]] = []
     for persona in personas:
-        missing = [check for check in persona.checks if check not in known]
-        if missing:
-            raise PersonaError(
-                "Persona '{}' references unknown check id(s): {}".format(
-                    persona.id, ", ".join(missing)
-                )
+        for check_id in persona.checks:
+            if check_id not in known:
+                missing.append((persona.id, check_id))
+    return missing
+
+
+def validate_persona_checks(personas: Iterable[Persona], known_check_ids: Iterable[str]) -> None:
+    missing = unknown_persona_check_ids(personas, known_check_ids)
+    if missing:
+        persona_id = missing[0][0]
+        check_ids = sorted({check_id for _, check_id in missing})
+        raise PersonaError(
+            "Persona '{}' references unknown check id(s): {}".format(
+                persona_id, ", ".join(check_ids)
             )
+        )
