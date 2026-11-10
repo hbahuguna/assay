@@ -1,0 +1,821 @@
+"""Deterministic five-phase orchestrator.
+
+Risk Analysis -> Test Planning -> Execution -> Evidence Collection -> Confidence Scoring
+
+The orchestrator owns state transitions, persistence, persona loading, the kill
+switch, and the final report.  Check implementation lives in static_analysis.py
+and browser.py so this module stays readable.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import sys
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
+
+from .browser import BrowserCheckRunner, BrowserOptions
+from .checks import apply_risk_weights, catalog_ids, plan_checks
+from .errors import HarnessError, PersonaError, StateError, TargetError
+from .evidence import EvidenceStore
+from .models import (
+    Check,
+    CheckStatus,
+    Finding,
+    KillSwitch,
+    Phase,
+    PhaseName,
+    PhaseStatus,
+    RunState,
+    RunStatus,
+    Severity,
+    Target,
+    severity_rank,
+    new_id,
+    utc_now,
+)
+from .outcomes import CheckOutcome
+from .personas import Persona, load_personas, validate_payload, validate_persona_checks
+from .report import build_report
+from .risk import RiskAnalyzer
+from .scoring import score_confidence
+from .static_analysis import Inventory, SourceInspector, StaticCheckRunner
+from .workflows import Workflow, get_workflow
+
+
+@dataclass
+class RunOptions:
+    target: str
+    source: Optional[str] = None
+    intent: str = "Assess release readiness of the target."
+    workflow_id: str = "release-confidence"
+    personas_dir: str = "personas"
+    selected_personas: List[str] = field(default_factory=list)
+    max_checks: int = 20
+    no_browser: bool = False
+    headless: bool = True
+    timeout_ms: int = 30000
+    viewport: str = "1440x900"
+    kill_on: str = "critical"
+    require_personas: int = 3
+    verbose: bool = False
+
+
+class Orchestrator:
+    def __init__(self, root: Path, options: RunOptions, log=None) -> None:
+        self.root = Path(root).resolve()
+        self.options = options
+        from .state import StateStore
+
+        self.state_store = StateStore(self.root)
+        self.log_fn = log
+        self.state: Optional[RunState] = None
+        self.evidence: Optional[EvidenceStore] = None
+        self.personas: List[Persona] = []
+        self.persona_map: Dict[str, Persona] = {}
+        self.workflow: Optional[Workflow] = None
+        self._validate_options()
+
+    # ------------------------------------------------------------------ public
+    def run(self, resume: bool = False) -> RunState:
+        self._load_personas()
+        target = self._resolve_target(self.options.target, self.options.source)
+        if resume:
+            state = self.state_store.load()
+            self.workflow = self._resolve_workflow(state.workflow_id)
+            if state.workflow_version and state.workflow_version != self.workflow.version:
+                raise StateError(
+                    "Workflow '{}' changed since this run started (saved version {}, current version {}). "
+                    "Start a new run instead of resuming.".format(
+                        state.workflow_id, state.workflow_version, self.workflow.version
+                    )
+                )
+            self._prepare_resume(state, target)
+        else:
+            self.workflow = self._resolve_workflow(self.options.workflow_id)
+            state = self._new_state(target)
+            if self.state_store.kill_request():
+                self.log("Ignoring a stale manual kill request from a previous run.")
+                self.state_store.clear_kill()
+            self.state_store.ensure()
+            self.state_store.save(state)
+        self.state = state
+        self.evidence = EvidenceStore(self.root, state.run_id)
+        evidence_phase = state.phase(PhaseName.EVIDENCE_COLLECTION.value)
+        if resume and evidence_phase.status != PhaseStatus.COMPLETED.value:
+            self.evidence.reconcile(state.checks)
+        state.evidence_dir = self.evidence.summary()["directory"]
+        self.state_store.save(state)
+
+        self.log(
+            "Run {} | workflow={}@{} | target={} | intent={!r}".format(
+                state.run_id,
+                state.workflow_id,
+                state.workflow_version,
+                state.target.resolved,
+                state.intent,
+            )
+        )
+        try:
+            for phase in state.phases:
+                if phase.name in (PhaseName.EVIDENCE_COLLECTION.value, PhaseName.CONFIDENCE_SCORING.value):
+                    continue
+                if state.kill_switch.triggered:
+                    if phase.status not in (PhaseStatus.COMPLETED.value,):
+                        self._skip_phase(phase, "Kill switch halts the remaining workflow.")
+                    continue
+                if phase.status == PhaseStatus.COMPLETED.value:
+                    continue
+                manual = self.state_store.kill_request()
+                if manual:
+                    self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
+                    self._skip_phase(phase, "Kill switch halts the remaining workflow.")
+                    continue
+                self._run_phase(phase)
+
+            self._run_phase(state.phase(PhaseName.EVIDENCE_COLLECTION.value))
+            self._run_phase(state.phase(PhaseName.CONFIDENCE_SCORING.value))
+            self._finalize_run()
+        except Exception as exc:
+            if self.state is not None:
+                self.state.status = RunStatus.FAILED.value
+                self.state.error = "{}: {}".format(type(exc).__name__, exc)
+                self.state.touch()
+                for phase in self.state.phases:
+                    if phase.status == PhaseStatus.RUNNING.value:
+                        phase.status = PhaseStatus.FAILED.value
+                        phase.completed_at = utc_now()
+                        phase.summary = self.state.error
+                self.state_store.save(self.state)
+                self.state_store.append_event(
+                    {"run_id": self.state.run_id, "event": "run_failed", "error": self.state.error}
+                )
+            raise
+        return state
+
+    def abort(self, reason: str) -> None:
+        self.state_store.request_kill(reason)
+        self.state_store.append_event({"event": "manual_kill_requested", "reason": reason})
+
+    # ------------------------------------------------------------------ setup
+    def _validate_options(self) -> None:
+        if self.options.kill_on not in ("critical", "high", "never"):
+            raise HarnessError("kill_on must be one of: critical, high, never")
+        if self.options.max_checks < 1:
+            raise HarnessError("max_checks must be at least 1")
+        try:
+            width, height = self.options.viewport.lower().split("x", 1)
+            if int(width) < 320 or int(height) < 240:
+                raise ValueError
+        except ValueError:
+            raise HarnessError("viewport must look like 1440x900")
+
+    def _load_personas(self) -> None:
+        personas_dir = Path(self.options.personas_dir).expanduser()
+        if not personas_dir.is_absolute():
+            cwd_candidate = Path.cwd() / personas_dir
+            root_candidate = self.root / personas_dir
+            personas_dir = cwd_candidate if cwd_candidate.is_dir() else root_candidate
+        self.personas = load_personas(
+            personas_dir,
+            selected=self.options.selected_personas or None,
+            require_minimum=self.options.require_personas,
+        )
+        validate_persona_checks(self.personas, catalog_ids())
+        self.persona_map = {persona.id: persona for persona in self.personas}
+        self.log(
+            "Loaded personas: {}".format(", ".join(persona.id for persona in self.personas))
+        )
+
+    def _resolve_target(self, raw: str, source: Optional[str]) -> Target:
+        raw = (raw or "").strip()
+        if not raw:
+            raise TargetError("A target URL or directory is required.")
+        if raw.startswith(("http://", "https://")):
+            parsed = urlsplit(raw)
+            if not parsed.netloc:
+                raise TargetError("Target URL is missing a host: {}".format(raw))
+            kind = "url"
+            resolved = raw
+            source_root = self._resolve_source(source) if source else None
+        else:
+            path = Path(raw).expanduser()
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            path = path.resolve()
+            if not path.exists():
+                raise TargetError("Target path does not exist: {}".format(path))
+            kind = "directory" if path.is_dir() else "file"
+            resolved = str(path)
+            source_root = str(path if path.is_dir() else path.parent)
+            if source:
+                source_root = self._resolve_source(source)
+        if source_root is not None:
+            source_path = Path(source_root)
+            if not source_path.is_dir():
+                source_root = str(source_path.parent)
+        return Target(raw=raw, kind=kind, resolved=resolved, source=source_root)
+
+    @staticmethod
+    def _resolve_source(source: Optional[str]) -> Optional[str]:
+        if not source:
+            return None
+        path = Path(source).expanduser()
+        if not path.is_absolute():
+            path = Path.cwd() / path
+        path = path.resolve()
+        if not path.exists():
+            raise TargetError("Source path does not exist: {}".format(path))
+        return str(path)
+
+    def _resolve_workflow(self, workflow_id: str) -> Workflow:
+        return get_workflow(workflow_id, workflows_dir=self.root / ".harness" / "workflows")
+
+    def _new_state(self, target: Target) -> RunState:
+        if self.workflow is None:
+            self.workflow = self._resolve_workflow(self.options.workflow_id)
+        run_id = utc_now().replace("-", "").replace(":", "").replace("Z", "Z")
+        run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
+        phases = [
+            Phase(name=definition.name, title=definition.title)
+            for definition in self.workflow.phases
+        ]
+        state = RunState(
+            run_id=run_id,
+            workflow_id=self.workflow.id,
+            workflow_version=self.workflow.version,
+            target=target,
+            intent=self.options.intent,
+            phases=phases,
+            options={
+                "max_checks": self.options.max_checks,
+                "no_browser": self.options.no_browser,
+                "headless": self.options.headless,
+                "timeout_ms": self.options.timeout_ms,
+                "viewport": self.options.viewport,
+                "kill_on": self.options.kill_on,
+                "selected_personas": list(self.options.selected_personas),
+                "source": target.source,
+            },
+            kill_switch=KillSwitch(armed=True, threshold=self.options.kill_on),
+        )
+        state.personas = [self._public_persona(persona) for persona in self.personas]
+        state.evidence_dir = str(Path(".harness") / "evidence" / run_id)
+        return state
+
+    def _prepare_resume(self, state: RunState, target: Target) -> None:
+        if state.status == RunStatus.HALTED.value:
+            raise StateError(
+                "This run was halted by the kill switch. Start a new run after investigating the finding, "
+                "or remove .harness/KILL and use a new run ID."
+            )
+        if state.target.kind != target.kind or state.target.resolved != target.resolved:
+            raise StateError(
+                "Resume target does not match the saved run. Saved: {}; requested: {}.".format(
+                    state.target.resolved, target.resolved
+                )
+            )
+        execution = state.phase(PhaseName.EXECUTION.value)
+        for phase in state.phases:
+            if phase.status in (PhaseStatus.RUNNING.value, PhaseStatus.FAILED.value):
+                phase.status = PhaseStatus.PENDING.value
+                phase.completed_at = None
+                phase.summary = ""
+            if phase.name in (PhaseName.RISK_ANALYSIS.value, PhaseName.TEST_PLANNING.value):
+                if phase.status != PhaseStatus.COMPLETED.value:
+                    phase.status = PhaseStatus.PENDING.value
+        if execution.status != PhaseStatus.COMPLETED.value:
+            rerun_ids = {
+                check.id
+                for check in state.checks
+                if check.status in (CheckStatus.RUNNING.value, CheckStatus.PLANNED.value, CheckStatus.ERROR.value)
+            }
+            state.findings = [finding for finding in state.findings if finding.check_id not in rerun_ids]
+            for check in state.checks:
+                if check.id in rerun_ids:
+                    check.status = CheckStatus.PLANNED.value
+                    check.actual = ""
+                    check.evidence = []
+                    check.finding_ids = []
+                    check.skip_reason = ""
+                    check.started_at = None
+                    check.completed_at = None
+                    check.metadata = {}
+        state.status = RunStatus.RUNNING.value
+        state.error = ""
+        state.completed_at = None
+        state.halted_reason = ""
+        state.personas = [self._public_persona(persona) for persona in self.personas]
+        self.state_store.save(state)
+        self.log("Resuming run {} from the first incomplete phase.".format(state.run_id))
+
+    @staticmethod
+    def _public_persona(persona: Persona) -> Dict[str, Any]:
+        data = persona.public()
+        data["schema_valid"] = True
+        data["required_fields"] = list(persona.output_schema.get("required", []))
+        return data
+
+    # ------------------------------------------------------------------ phases
+    def _run_phase(self, phase: Phase) -> None:
+        assert self.state is not None
+        if phase.status == PhaseStatus.COMPLETED.value:
+            return
+        if phase.name == PhaseName.RISK_ANALYSIS.value:
+            self._phase_risk_analysis(phase)
+        elif phase.name == PhaseName.TEST_PLANNING.value:
+            self._phase_test_planning(phase)
+        elif phase.name == PhaseName.EXECUTION.value:
+            self._phase_execution(phase)
+        elif phase.name == PhaseName.EVIDENCE_COLLECTION.value:
+            self._phase_evidence(phase)
+        elif phase.name == PhaseName.CONFIDENCE_SCORING.value:
+            self._phase_confidence(phase)
+        else:
+            raise HarnessError("Unknown phase: {}".format(phase.name))
+
+    def _start_phase(self, phase: Phase) -> None:
+        assert self.state is not None
+        phase.status = PhaseStatus.RUNNING.value
+        phase.started_at = utc_now()
+        self.state.current_phase = phase.name
+        self.state.touch()
+        self.state_store.save(self.state)
+        self.log("{}: {}".format(phase.title, "started"))
+
+    def _finish_phase(
+        self, phase: Phase, status: str, summary: str, details: Optional[Dict[str, Any]] = None
+    ) -> None:
+        assert self.state is not None
+        phase.status = status
+        phase.summary = summary
+        phase.completed_at = utc_now()
+        if details:
+            phase.details = details
+        self.state.touch()
+        self.state_store.save(self.state)
+        self.log("{}: {} - {}".format(phase.title, status, summary))
+
+    def _skip_phase(self, phase: Phase, reason: str) -> None:
+        if phase.status == PhaseStatus.COMPLETED.value:
+            return
+        if phase.started_at is None:
+            phase.started_at = utc_now()
+        self._finish_phase(phase, PhaseStatus.SKIPPED.value, reason)
+
+    def _phase_risk_analysis(self, phase: Phase) -> None:
+        assert self.state is not None
+        self._start_phase(phase)
+        if self.state.inventory:
+            inventory = Inventory.from_dict(self.state.inventory)
+        elif self.state.target.source:
+            self.log("Inspecting source inventory at {}".format(self.state.target.source))
+            inventory = SourceInspector(Path(self.state.target.source)).discover()
+        else:
+            inventory = Inventory(available=False, root="")
+        self.state.inventory = inventory.to_dict()
+        browser_planned = self.state.target.kind == "url" and not self.options.no_browser
+        risks = RiskAnalyzer(self.state.target, self.state.intent, inventory, browser_planned).analyze()
+        self.state.risks = risks
+        top = [{"id": risk.id, "title": risk.title, "priority": risk.priority} for risk in risks[:5]]
+        summary = "{} risk(s) ranked from intent, target shape, and inventory signals.".format(len(risks))
+        self._finish_phase(
+            phase,
+            PhaseStatus.COMPLETED.value,
+            summary,
+            {
+                "inventory_available": inventory.available,
+                "source_files": len(inventory.source_files),
+                "markup_files": len(inventory.markup_files),
+                "test_files": len(inventory.test_files),
+                "manifests": inventory.manifests[:20],
+                "browser_planned": browser_planned,
+                "top_risks": top,
+            },
+        )
+
+    def _phase_test_planning(self, phase: Phase) -> None:
+        assert self.state is not None
+        self._start_phase(phase)
+        inventory = Inventory.from_dict(self.state.inventory) if self.state.inventory else Inventory(False, "")
+        checks = plan_checks(
+            self.state.target,
+            inventory.to_dict(),
+            self.personas,
+            self.options.max_checks,
+            self.options.no_browser,
+        )
+        apply_risk_weights(checks, self.state.risks)
+        self.state.checks = checks
+        by_kind: Dict[str, int] = {}
+        by_persona: Dict[str, int] = {}
+        for check in checks:
+            by_kind[check.kind] = by_kind.get(check.kind, 0) + 1
+            by_persona[check.persona] = by_persona.get(check.persona, 0) + 1
+        summary = "{} check(s) planned: {} static, {} browser.".format(
+            len(checks), by_kind.get("static", 0), by_kind.get("browser", 0)
+        )
+        self._finish_phase(
+            phase,
+            PhaseStatus.COMPLETED.value,
+            summary,
+            {"by_kind": by_kind, "by_persona": by_persona, "check_ids": [check.id for check in checks]},
+        )
+
+    def _phase_execution(self, phase: Phase) -> None:
+        assert self.state is not None
+        self._start_phase(phase)
+        if self.state.kill_switch.triggered:
+            self._mark_remaining_skipped("Kill switch halted execution before checks started.")
+            self._finish_phase(
+                phase,
+                PhaseStatus.HALTED.value,
+                "Execution halted: {}".format(self.state.halted_reason),
+            )
+            return
+
+        static_checks = [
+            check
+            for check in self.state.checks
+            if check.kind == "static"
+            and check.status
+            not in (
+                CheckStatus.PASSED.value,
+                CheckStatus.FAILED.value,
+                CheckStatus.BLOCKED.value,
+                CheckStatus.SKIPPED.value,
+            )
+        ]
+        if static_checks:
+            if self.state.target.source:
+                runner = StaticCheckRunner(
+                    Path(self.state.target.source),
+                    Inventory.from_dict(self.state.inventory),
+                    self.evidence,  # type: ignore[arg-type]
+                )
+                for check in static_checks:
+                    if self.state.kill_switch.triggered:
+                        break
+                    manual = self.state_store.kill_request()
+                    if manual:
+                        self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
+                        break
+                    check.status = CheckStatus.RUNNING.value
+                    check.started_at = utc_now()
+                    self.state_store.save(self.state)
+                    outcome = runner.run(check)
+                    halt = self._record_outcome(check, outcome)
+                    if halt:
+                        break
+            else:
+                for check in static_checks:
+                    self._record_outcome(
+                        check,
+                        CheckOutcome(
+                            status=CheckStatus.BLOCKED.value,
+                            actual="No source directory was available for static inspection.",
+                            metadata={"limitation": "Static inspection was not available for this run."},
+                        ),
+                    )
+
+        if not self.state.kill_switch.triggered:
+            manual = self.state_store.kill_request()
+            if manual:
+                self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
+        if not self.state.kill_switch.triggered:
+            browser_checks = [
+                check
+                for check in self.state.checks
+                if check.kind == "browser"
+                and check.status
+                not in (
+                    CheckStatus.PASSED.value,
+                    CheckStatus.FAILED.value,
+                    CheckStatus.BLOCKED.value,
+                    CheckStatus.SKIPPED.value,
+                )
+            ]
+            if browser_checks:
+                if self.state.target.kind != "url":
+                    for check in browser_checks:
+                        self._record_outcome(
+                            check,
+                            CheckOutcome(
+                                status=CheckStatus.BLOCKED.value,
+                                actual="No live URL target was supplied; Operate coverage is unavailable.",
+                                metadata={"limitation": "Operate coverage was not available for this run."},
+                            ),
+                        )
+                else:
+                    viewport = self.options.viewport.lower().split("x", 1)
+                    runner = BrowserCheckRunner(
+                        self.evidence,  # type: ignore[arg-type]
+                        BrowserOptions(
+                            headless=self.options.headless,
+                            timeout_ms=self.options.timeout_ms,
+                            viewport_width=int(viewport[0]),
+                            viewport_height=int(viewport[1]),
+                        ),
+                        self._browser_outcome_callback,
+                    )
+                    runner.run(self.state.target.resolved, browser_checks)
+
+        if self.state.kill_switch.triggered:
+            self._mark_remaining_skipped("Kill switch halted execution.")
+            self._finish_phase(
+                phase,
+                PhaseStatus.HALTED.value,
+                "Execution halted: {}".format(self.state.halted_reason),
+                {"halted_reason": self.state.halted_reason},
+            )
+        else:
+            executed = [
+                check
+                for check in self.state.checks
+                if check.status in (CheckStatus.PASSED.value, CheckStatus.FAILED.value)
+            ]
+            blocked = [
+                check
+                for check in self.state.checks
+                if check.status in (CheckStatus.BLOCKED.value, CheckStatus.ERROR.value)
+            ]
+            summary = "{} check(s) executed, {} blocked/errored, {} finding(s) recorded.".format(
+                len(executed), len(blocked), len(self.state.findings)
+            )
+            self._finish_phase(
+                phase,
+                PhaseStatus.COMPLETED.value,
+                summary,
+                {
+                    "executed": len(executed),
+                    "blocked": len(blocked),
+                    "findings": len(self.state.findings),
+                },
+            )
+
+    def _browser_outcome_callback(self, check: Check, outcome: CheckOutcome) -> bool:
+        halt = self._record_outcome(check, outcome)
+        manual = self.state_store.kill_request() if self.state_store else None
+        if manual and self.state is not None and not self.state.kill_switch.triggered:
+            self._trigger_kill("Manual kill requested: {}".format(manual), manual=True)
+            return True
+        return halt
+
+    def _record_outcome(self, check: Check, outcome: CheckOutcome) -> bool:
+        assert self.state is not None
+        check.status = outcome.status
+        check.actual = outcome.actual
+        check.evidence = list(outcome.evidence)
+        check.metadata = dict(outcome.metadata)
+        if outcome.status in (
+            CheckStatus.PASSED.value,
+            CheckStatus.FAILED.value,
+            CheckStatus.BLOCKED.value,
+            CheckStatus.SKIPPED.value,
+            CheckStatus.ERROR.value,
+        ):
+            check.completed_at = utc_now()
+        if outcome.status in (CheckStatus.BLOCKED.value, CheckStatus.SKIPPED.value):
+            check.skip_reason = str(outcome.metadata.get("limitation") or outcome.actual)
+        if outcome.status == CheckStatus.ERROR.value:
+            self.log("WARNING: {} errored: {}".format(check.id, outcome.actual))
+        matched = None
+        for draft in outcome.findings:
+            finding = self._to_finding(draft, check)
+            existing = next(
+                (item for item in self.state.findings if item.fingerprint == finding.fingerprint), None
+            )
+            if existing is not None:
+                for path in finding.evidence:
+                    if path and path not in existing.evidence:
+                        existing.evidence.append(path)
+                if existing.id not in check.finding_ids:
+                    check.finding_ids.append(existing.id)
+                if matched is None:
+                    matched = existing
+                continue
+            self.state.findings.append(finding)
+            check.finding_ids.append(finding.id)
+            if matched is None:
+                matched = finding
+        self.state.touch()
+        if self.evidence is not None:
+            self.evidence.checkpoint()
+        self.state_store.save(self.state)
+        self.state_store.append_event(
+            {
+                "run_id": self.state.run_id,
+                "event": "check_completed",
+                "check_id": check.id,
+                "status": check.status,
+                "findings": len(outcome.findings),
+            }
+        )
+        threshold = self.options.kill_on
+        if threshold == "never":
+            return False
+        trigger_rank = severity_rank(threshold)
+        for draft in outcome.findings:
+            if severity_rank(draft.severity) >= trigger_rank:
+                finding_id = matched.id if matched is not None else ""
+                self._trigger_kill(
+                    "Automatic kill switch: {} finding from check {}".format(draft.severity, check.id),
+                    finding_id=finding_id,
+                )
+                return True
+        return False
+
+    def _to_finding(self, draft, check: Check) -> Finding:
+        fingerprint = hashlib.sha256(
+            "{}|{}|{}|{}".format(
+                draft.domain, draft.title.strip().lower(), draft.location, draft.severity
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        finding = Finding(
+            id=new_id("finding"),
+            title=draft.title,
+            severity=draft.severity,
+            domain=draft.domain,
+            persona=check.persona,
+            strength=draft.strength,
+            consequence=draft.consequence,
+            location=draft.location,
+            reproduction=draft.reproduction,
+            evidence=list(draft.evidence) or list(check.evidence),
+            remediation=draft.remediation,
+            verification=draft.verification,
+            check_id=check.id,
+            tags=list(draft.tags),
+            fingerprint=fingerprint,
+        )
+        persona = self.persona_map.get(check.persona)
+        if persona is not None:
+            errors = validate_payload(finding.to_dict(), persona.output_schema)
+            if errors:
+                finding.tags.append("schema-invalid")
+                self.log(
+                    "WARNING: finding from {} does not satisfy the persona schema: {}".format(
+                        check.persona, "; ".join(errors[:5])
+                    )
+                )
+        return finding
+
+    def _mark_remaining_skipped(self, reason: str) -> None:
+        assert self.state is not None
+        for check in self.state.checks:
+            if check.status in (CheckStatus.PLANNED.value, CheckStatus.RUNNING.value):
+                self._record_outcome(
+                    check,
+                    CheckOutcome(
+                        status=CheckStatus.SKIPPED.value,
+                        actual=reason,
+                        metadata={"halted": self.state.kill_switch.triggered, "limitation": reason},
+                    ),
+                )
+
+    def _trigger_kill(self, reason: str, finding_id: str = "", manual: bool = False) -> None:
+        assert self.state is not None
+        if self.state.kill_switch.triggered:
+            return
+        self.state.kill_switch.triggered = True
+        self.state.kill_switch.reason = reason
+        self.state.kill_switch.triggered_at = utc_now()
+        self.state.kill_switch.finding_id = finding_id
+        self.state.kill_switch.manual = manual
+        self.state.status = RunStatus.HALTED.value
+        self.state.halted_reason = reason
+        execution = next((phase for phase in self.state.phases if phase.name == PhaseName.EXECUTION.value), None)
+        if execution is not None and execution.status in (PhaseStatus.RUNNING.value, PhaseStatus.PENDING.value):
+            execution.status = PhaseStatus.HALTED.value
+            execution.summary = reason
+            execution.completed_at = utc_now()
+        self.state.touch()
+        self.state_store.save(self.state)
+        self.state_store.append_event(
+            {"run_id": self.state.run_id, "event": "kill_switch", "reason": reason, "manual": manual}
+        )
+        self.log("KILL SWITCH: {}".format(reason))
+
+    def _phase_evidence(self, phase: Phase) -> None:
+        assert self.state is not None
+        if phase.status == PhaseStatus.COMPLETED.value:
+            return
+        self._start_phase(phase)
+        assert self.evidence is not None
+        metadata = {
+            "run_id": self.state.run_id,
+            "target": self.state.target.to_dict(),
+            "intent": self.state.intent,
+            "status": self.state.status,
+            "checks": {
+                "planned": len(self.state.checks),
+                "passed": len([c for c in self.state.checks if c.status == CheckStatus.PASSED.value]),
+                "failed": len([c for c in self.state.checks if c.status == CheckStatus.FAILED.value]),
+                "blocked": len([c for c in self.state.checks if c.status == CheckStatus.BLOCKED.value]),
+                "skipped": len([c for c in self.state.checks if c.status == CheckStatus.SKIPPED.value]),
+                "error": len([c for c in self.state.checks if c.status == CheckStatus.ERROR.value]),
+            },
+            "findings": len(self.state.findings),
+            "kill_switch": self.state.kill_switch.to_dict(),
+        }
+        manifest = self.evidence.finalize(metadata)
+        summary = manifest.get("summary", {})
+        self.state.evidence_dir = summary.get("directory", self.state.evidence_dir)
+        verification = self.evidence.verify()
+        self._finish_phase(
+            phase,
+            PhaseStatus.COMPLETED.value,
+            "{} evidence artifact(s), {} bytes; manifest {}.".format(
+                summary.get("count", 0), summary.get("total_bytes", 0), manifest.get("manifest_path", "")
+            ),
+            {
+                "manifest": manifest.get("manifest_path", ""),
+                "manifest_sha256": manifest.get("manifest_sha256", ""),
+                "summary": summary,
+                "verification": verification,
+            },
+        )
+
+    def _phase_confidence(self, phase: Phase) -> None:
+        assert self.state is not None
+        if phase.status == PhaseStatus.COMPLETED.value:
+            return
+        self._start_phase(phase)
+        limitations: List[str] = []
+        for check in self.state.checks:
+            note = check.metadata.get("limitation")
+            if note and str(note) not in limitations:
+                limitations.append(str(note))
+        if any(check.id == "browser.accessibility" for check in self.state.checks):
+            limitations.append(
+                "Automated accessibility checks do not establish WCAG conformance; human review is still required."
+            )
+        if any(check.id == "browser.security" for check in self.state.checks):
+            limitations.append(
+                "Security checks are bounded and non-destructive; they are not a penetration test or a certification."
+            )
+        confidence = score_confidence(
+            self.state.checks,
+            self.state.findings,
+            limitations=limitations,
+            halted=self.state.kill_switch.triggered,
+            kill_reason=self.state.halted_reason,
+        )
+        self.state.confidence = confidence
+        self._finish_phase(
+            phase,
+            PhaseStatus.COMPLETED.value,
+            "Confidence {}/100 ({}); gate {}; coverage {}%.".format(
+                confidence.score, confidence.band, confidence.gate.get("status"), confidence.coverage
+            ),
+            {
+                "score": confidence.score,
+                "band": confidence.band,
+                "gate": confidence.gate,
+                "breakdown": confidence.breakdown,
+            },
+        )
+
+    def _finalize_run(self) -> None:
+        assert self.state is not None
+        if self.state.kill_switch.triggered:
+            self.state.status = RunStatus.HALTED.value
+        elif self.state.error:
+            self.state.status = RunStatus.FAILED.value
+        else:
+            self.state.status = RunStatus.COMPLETED.value
+        self.state.completed_at = utc_now()
+        self.state.current_phase = PhaseName.CONFIDENCE_SCORING.value
+        self.state.touch()
+        self.state_store.save(self.state)
+        assert self.evidence is not None and self.workflow is not None
+        report = build_report(self.state, self.workflow, self.evidence.summary())
+        self.state_store.save_report(report)
+        self.state_store.append_event(
+            {
+                "run_id": self.state.run_id,
+                "event": "run_finished",
+                "status": self.state.status,
+                "confidence": self.state.confidence.score,
+                "findings": len(self.state.findings),
+            }
+        )
+        self.log(
+            "Run {} {} | confidence {}/100 | {} finding(s) | report {}".format(
+                self.state.run_id,
+                self.state.status,
+                self.state.confidence.score,
+                len(self.state.findings),
+                self.state_store.report_path,
+            )
+        )
+
+    # ------------------------------------------------------------------ util
+    def log(self, message: str) -> None:
+        if self.log_fn is not None:
+            self.log_fn(message)
+        else:
+            print("[quality-harness] {}".format(message), file=sys.stderr)

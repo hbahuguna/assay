@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Assay demo: release confidence</title>
+    <meta name="description" content="A small accessible page used to exercise the browser Operate layer.">
+  </head>
+  <body>
+    <main>
+      <h1>Release confidence demo</h1>
+      <p>This page is intentionally clean so the browser checks have a stable baseline.</p>
+      <img src="logo.svg" alt="Assay logo">
+      <section aria-labelledby="subscribe-heading">
+        <h2 id="subscribe-heading">Subscribe to release notes</h2>
+        <form action="/subscribe" method="post">
+          <label for="email">Email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+          <button type="submit">Subscribe</button>
+        </form>
+      </section>
+      <p><a href="https://example.com/privacy">Privacy policy</a></p>
+    </main>
+  </body>
+</html>

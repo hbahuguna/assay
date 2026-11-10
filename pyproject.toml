@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quality-harness"
+version = "0.1.0"
+description = "Deterministic risk-based AI testing harness with inspect, operate, evidence, and release-confidence phases."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Quality Harness contributors" }]
+keywords = ["testing", "release-confidence", "playwright", "ai-agents"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.optional-dependencies]
+browser = ["playwright>=1.40"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+quality-harness = "harness.cli:main"
+
+[tool.setuptools]
+packages = ["harness"]
+
+[tool.setuptools.package-data]
+harness = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

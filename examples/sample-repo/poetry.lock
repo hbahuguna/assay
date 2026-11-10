@@ -1,0 +1,4 @@
+# Minimal lockfile for the fixture. The harness only needs to see that one
+# exists, not resolve a real dependency graph.
+flask==2.2.5
+pytest==7.4.0

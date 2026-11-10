@@ -1,0 +1,925 @@
+"""Operate layer: Playwright browser control, evidence capture, and checks.
+
+Playwright is an optional dependency.  If it is missing or a browser cannot be
+launched, every browser check is reported as blocked with an actionable reason;
+the run continues with whatever Inspect evidence exists.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from .errors import BrowserUnavailable
+from .evidence import EvidenceStore
+from .models import Check, CheckStatus, Severity, Strength
+from .outcomes import CheckOutcome
+
+MAX_EVENTS = 500
+
+
+def sanitize_url(url: str) -> str:
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "[unparseable-url]"
+    sensitive = (
+        "token",
+        "access_token",
+        "id_token",
+        "key",
+        "api_key",
+        "apikey",
+        "secret",
+        "password",
+        "passwd",
+        "code",
+        "session",
+        "sessionid",
+        "jwt",
+        "auth",
+        "signature",
+        "sig",
+    )
+    try:
+        query = parse_qsl(parts.query, keep_blank_values=True)
+    except ValueError:
+        query = []
+    redacted = []
+    for key, value in query:
+        if any(token in key.lower() for token in sensitive):
+            redacted.append((key, "[REDACTED]"))
+        else:
+            redacted.append((key, value))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(redacted, doseq=True), parts.fragment))
+
+
+TOKEN_PATTERNS = [
+    re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]+"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\b(?:sk|rk)_live_[0-9A-Za-z]{16,}\b"),
+    re.compile(r"(?i)((?:token|secret|password|api[_-]?key)\s*[=:]\s*)['\"]?[^\s'\"&,;]{6,}"),
+]
+
+
+def redact_text(value: str) -> str:
+    text = str(value or "")
+    for pattern in TOKEN_PATTERNS:
+        if pattern.groups:
+            text = pattern.sub(lambda match: match.group(1) + "[REDACTED]", text)
+        else:
+            text = pattern.sub("[REDACTED]", text)
+    return text[:2000]
+
+
+JS_SNAPSHOT = r"""
+() => {
+  const text = (el) => ((el && (el.innerText || el.textContent)) || '').trim();
+  const selectorFor = (el) => {
+    if (!el || !el.tagName) return '';
+    if (el.id) return '#' + el.id;
+    let index = 0;
+    let node = el;
+    while (node && node.previousElementSibling) { index += 1; node = node.previousElementSibling; }
+    const cls = (el.className && typeof el.className === 'string') ? '.' + el.className.trim().split(/\s+/).slice(0,2).join('.') : '';
+    return el.tagName.toLowerCase() + cls + ':nth-of-type(' + (index + 1) + ')';
+  };
+  const explicitName = (el) => {
+    const aria = (el.getAttribute('aria-label') || '').trim();
+    if (aria) return aria;
+    const labelledby = (el.getAttribute('aria-labelledby') || '').trim();
+    if (labelledby) {
+      const parts = labelledby.split(/\s+/).map(id => text(document.getElementById(id))).filter(Boolean);
+      if (parts.length) return parts.join(' ');
+    }
+    const title = (el.getAttribute('title') || '').trim();
+    if (title) return title;
+    if (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'button' || el.type === 'reset')) return (el.value || '').trim();
+    if (el.tagName === 'IMG') return (el.getAttribute('alt') || '').trim();
+    return text(el);
+  };
+  const images = Array.from(document.querySelectorAll('img')).slice(0, 200).map(el => ({
+    selector: selectorFor(el),
+    src: el.currentSrc || el.getAttribute('src') || '',
+    altPresent: el.hasAttribute('alt'),
+    alt: el.getAttribute('alt'),
+    role: el.getAttribute('role') || ''
+  }));
+  const inputs = Array.from(document.querySelectorAll('input, select, textarea')).slice(0, 200).map(el => ({
+    tag: el.tagName.toLowerCase(),
+    type: (el.getAttribute('type') || '').toLowerCase(),
+    id: el.id || '',
+    name: el.getAttribute('name') || '',
+    selector: selectorFor(el),
+    hasLabel: !!(el.labels && el.labels.length) || !!(el.getAttribute('aria-label') || '').trim() ||
+              !!(el.getAttribute('aria-labelledby') || '').trim() || !!(el.getAttribute('title') || '').trim(),
+    placeholder: el.getAttribute('placeholder') || ''
+  }));
+  const controls = Array.from(document.querySelectorAll('button, a[href], [role="button"], [role="link"]')).slice(0, 300).map(el => ({
+    tag: el.tagName.toLowerCase(),
+    selector: selectorFor(el),
+    name: explicitName(el),
+    href: el.getAttribute('href') || '',
+    target: el.getAttribute('target') || '',
+    rel: el.getAttribute('rel') || ''
+  }));
+  const forms = Array.from(document.querySelectorAll('form')).slice(0, 50).map(el => ({
+    selector: selectorFor(el),
+    action: el.getAttribute('action') || '',
+    method: (el.getAttribute('method') || 'get').toLowerCase()
+  }));
+  const idCounts = {};
+  Array.from(document.querySelectorAll('[id]')).forEach(el => { idCounts[el.id] = (idCounts[el.id] || 0) + 1; });
+  const duplicateIds = Object.keys(idCounts).filter(id => idCounts[id] > 1).slice(0, 50);
+  const positiveTabindex = Array.from(document.querySelectorAll('[tabindex]')).filter(el => {
+    const value = parseInt(el.getAttribute('tabindex'), 10);
+    return !isNaN(value) && value > 0;
+  }).length;
+  const h1s = Array.from(document.querySelectorAll('h1')).slice(0, 20).map(text);
+  const headingCounts = {};
+  ['h1','h2','h3','h4','h5','h6'].forEach(tag => { headingCounts[tag] = document.querySelectorAll(tag).length; });
+  const scripts = Array.from(document.querySelectorAll('script[src]')).slice(0, 200).map(el => el.getAttribute('src') || '');
+  const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map(el => ({
+    selector: selectorFor(el),
+    href: el.getAttribute('href') || '',
+    text: text(el).slice(0, 120),
+    target: el.getAttribute('target') || '',
+    rel: el.getAttribute('rel') || ''
+  }));
+  return {
+    url: location.href,
+    title: document.title || '',
+    lang: document.documentElement.getAttribute('lang') || '',
+    bodyTextLength: (document.body && (document.body.innerText || '').trim().length) || 0,
+    metaDescription: (document.querySelector('meta[name="description"]') || {}).content || '',
+    images,
+    inputs,
+    controls,
+    forms,
+    duplicateIds,
+    positiveTabindex,
+    h1s,
+    headingCounts,
+    scripts,
+    links
+  };
+}
+"""
+
+
+@dataclass
+class BrowserOptions:
+    headless: bool = True
+    timeout_ms: int = 30000
+    viewport_width: int = 1440
+    viewport_height: int = 900
+
+
+@dataclass
+class NavigationResult:
+    url: str
+    final_url: str
+    status: Optional[int] = None
+    headers: Dict[str, str] = field(default_factory=dict)
+    error: str = ""
+
+
+class BrowserController:
+    def __init__(self, evidence: EvidenceStore, options: BrowserOptions) -> None:
+        self.evidence = evidence
+        self.options = options
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.page = None
+        self.console_messages: List[Dict[str, Any]] = []
+        self.page_errors: List[Dict[str, Any]] = []
+        self.network_entries: List[Dict[str, Any]] = []
+        self.cookies: List[Dict[str, Any]] = []
+        self.snapshot: Dict[str, Any] = {}
+        self.navigation: Optional[NavigationResult] = None
+        self.evidence_refs: Dict[str, str] = {}
+        self.capture_notes: List[str] = []
+
+    async def start(self) -> None:
+        try:
+            from playwright.async_api import async_playwright
+        except Exception as exc:
+            raise BrowserUnavailable(
+                "Playwright is not installed ({}). Install it with `pip install playwright` "
+                "and `python -m playwright install chromium`, or run with --no-browser.".format(exc)
+            )
+        try:
+            self.playwright = await async_playwright().start()
+            self.browser = await self.playwright.chromium.launch(headless=self.options.headless)
+            self.context = await self.browser.new_context(
+                viewport={"width": self.options.viewport_width, "height": self.options.viewport_height},
+                ignore_https_errors=False,
+            )
+            self.page = await self.context.new_page()
+            self.page.on("console", self._on_console)
+            self.page.on("pageerror", self._on_page_error)
+            self.page.on("response", self._on_response)
+            self.page.on("requestfailed", self._on_request_failed)
+        except Exception as exc:
+            await self.close()
+            raise BrowserUnavailable(
+                "Could not launch Chromium ({}). Run `python -m playwright install chromium`, "
+                "or use --no-browser.".format(exc)
+            )
+
+    def _on_console(self, message: Any) -> None:
+        if len(self.console_messages) >= MAX_EVENTS:
+            return
+        try:
+            self.console_messages.append(
+                {"type": message.type, "text": redact_text(message.text), "location": str(message.location)}
+            )
+        except Exception:
+            pass
+
+    def _on_page_error(self, error: Any) -> None:
+        if len(self.page_errors) >= MAX_EVENTS:
+            return
+        self.page_errors.append({"text": redact_text(str(error))})
+
+    def _on_response(self, response: Any) -> None:
+        if len(self.network_entries) >= MAX_EVENTS:
+            return
+        try:
+            request = response.request
+            self.network_entries.append(
+                {
+                    "url": sanitize_url(response.url),
+                    "method": request.method,
+                    "resource_type": request.resource_type,
+                    "status": response.status,
+                    "ok": 200 <= response.status < 400,
+                    "failed": False,
+                }
+            )
+        except Exception:
+            pass
+
+    def _on_request_failed(self, request: Any) -> None:
+        if len(self.network_entries) >= MAX_EVENTS:
+            return
+        try:
+            self.network_entries.append(
+                {
+                    "url": sanitize_url(request.url),
+                    "method": request.method,
+                    "resource_type": request.resource_type,
+                    "status": None,
+                    "ok": False,
+                    "failed": True,
+                    "failure": redact_text(str(request.failure or "request failed")),
+                }
+            )
+        except Exception:
+            pass
+
+    async def navigate(self, url: str) -> NavigationResult:
+        result = NavigationResult(url=url, final_url=url)
+        if self.page is None:
+            result.error = "Browser page is not available."
+            self.navigation = result
+            return result
+        try:
+            response = await self.page.goto(url, wait_until="load", timeout=self.options.timeout_ms)
+            try:
+                await self.page.wait_for_timeout(600)
+            except Exception:
+                pass
+            result.status = response.status if response else None
+            result.final_url = self.page.url
+            if response is not None:
+                try:
+                    result.headers = {str(k).lower(): str(v) for k, v in (await response.all_headers()).items()}
+                except Exception as exc:
+                    self.capture_notes.append("Could not read response headers: {}".format(exc))
+        except Exception as exc:
+            result.error = redact_text(str(exc))
+            result.final_url = self.page.url if self.page else url
+        self.navigation = result
+        await self._capture(url)
+        return result
+
+    async def _capture(self, requested_url: str) -> None:
+        assert self.page is not None
+        try:
+            capture_path = self.evidence.run_dir / ".capture-landing.png"
+            await self.page.screenshot(path=str(capture_path), full_page=True)
+            # Register the screenshot through the store so it is hashed and manifest-backed.
+            data = capture_path.read_bytes()
+            self.evidence_refs["screenshot"] = self.evidence.save_screenshot(
+                "landing-page", data, description="Landing page screenshot after navigation."
+            )
+            try:
+                capture_path.unlink()
+            except OSError:
+                pass
+        except Exception as exc:
+            self.capture_notes.append("Screenshot capture failed: {}".format(redact_text(str(exc))))
+        try:
+            snapshot = await self.page.evaluate(JS_SNAPSHOT)
+            self.snapshot = snapshot if isinstance(snapshot, dict) else {}
+        except Exception as exc:
+            self.capture_notes.append("DOM snapshot failed: {}".format(redact_text(str(exc))))
+            self.snapshot = {}
+        try:
+            self.cookies = [
+                {
+                    "name": str(cookie.get("name", "")),
+                    "domain": str(cookie.get("domain", "")),
+                    "path": str(cookie.get("path", "")),
+                    "secure": bool(cookie.get("secure", False)),
+                    "http_only": bool(cookie.get("httpOnly", False)),
+                    "same_site": str(cookie.get("sameSite", "")),
+                    "expires": cookie.get("expires"),
+                    "value": "[REDACTED]",
+                }
+                for cookie in await self.context.cookies()
+            ]
+        except Exception as exc:
+            self.capture_notes.append("Cookie capture failed: {}".format(redact_text(str(exc))))
+        if self.navigation is not None:
+            self.evidence_refs["headers"] = self.evidence.save_json(
+                "response-headers",
+                {"url": sanitize_url(self.navigation.final_url), "status": self.navigation.status, "headers": self.navigation.headers},
+                kind="network_headers",
+                description="Response headers for the landing page.",
+            )
+        if self.console_messages or self.page_errors:
+            self.evidence_refs["console"] = self.evidence.save_console_log(
+                {"messages": self.console_messages, "page_errors": self.page_errors}
+            )
+        else:
+            self.evidence_refs["console"] = self.evidence.save_console_log(
+                {"messages": [], "page_errors": []}
+            )
+        self.evidence_refs["network"] = self.evidence.save_network_log(self.network_entries)
+        self.evidence_refs["snapshot"] = self.evidence.save_json(
+            "dom-snapshot",
+            self.snapshot,
+            kind="dom_snapshot",
+            description="Sanitized DOM snapshot used by deterministic browser checks.",
+        )
+        self.evidence_refs["cookies"] = self.evidence.save_json(
+            "cookies",
+            self.cookies,
+            kind="cookies",
+            description="Cookie names and security flags; values are redacted.",
+        )
+        self.evidence_refs["navigation"] = self.evidence.save_json(
+            "navigation",
+            {
+                "requested_url": sanitize_url(requested_url),
+                "final_url": sanitize_url(self.navigation.final_url if self.navigation else requested_url),
+                "status": self.navigation.status if self.navigation else None,
+                "error": self.navigation.error if self.navigation else "",
+                "capture_notes": self.capture_notes,
+            },
+            kind="navigation",
+            description="Navigation result and capture limitations.",
+        )
+
+    async def close(self) -> None:
+        for closer in (self.context, self.browser):
+            if closer is not None:
+                try:
+                    await closer.close()
+                except Exception:
+                    pass
+        if self.playwright is not None:
+            try:
+                await self.playwright.stop()
+            except Exception:
+                pass
+        self.context = None
+        self.browser = None
+        self.playwright = None
+
+
+class BrowserCheckRunner:
+    def __init__(
+        self,
+        evidence: EvidenceStore,
+        options: BrowserOptions,
+        on_outcome: Callable[[Check, CheckOutcome], bool],
+    ) -> None:
+        self.evidence = evidence
+        self.options = options
+        self.on_outcome = on_outcome
+
+    def run(self, url: str, checks: List[Check]) -> None:
+        try:
+            asyncio.run(self._run(url, checks))
+        except BrowserUnavailable as exc:
+            for check in checks:
+                self.on_outcome(
+                    check,
+                    CheckOutcome(
+                        status=CheckStatus.BLOCKED.value,
+                        actual="Browser checks were not executed: {}".format(exc),
+                        metadata={"limitation": str(exc)},
+                    ),
+                )
+
+    async def _run(self, url: str, checks: List[Check]) -> None:
+        controller = BrowserController(self.evidence, self.options)
+        await controller.start()
+        try:
+            navigation = await controller.navigate(url)
+            for index, check in enumerate(checks):
+                if navigation.error and check.id != "browser.load":
+                    outcome = CheckOutcome(
+                        status=CheckStatus.BLOCKED.value,
+                        actual="Navigation did not complete: {}".format(navigation.error),
+                        evidence=[controller.evidence_refs.get("navigation", "")],
+                        metadata={"limitation": navigation.error},
+                    )
+                else:
+                    outcome = self._evaluate(check, controller, navigation)
+                halt = self.on_outcome(check, outcome)
+                if halt:
+                    for remaining in checks[index + 1 :]:
+                        self.on_outcome(
+                            remaining,
+                            CheckOutcome(
+                                status=CheckStatus.SKIPPED.value,
+                                actual="Skipped because the kill switch halted execution.",
+                                metadata={"halted": True},
+                            ),
+                        )
+                    break
+        finally:
+            await controller.close()
+
+    def _common_evidence(self, controller: BrowserController) -> List[str]:
+        keys = ["screenshot", "headers", "console", "network", "snapshot", "cookies", "navigation"]
+        return [controller.evidence_refs[key] for key in keys if controller.evidence_refs.get(key)]
+
+    def _evaluate(
+        self, check: Check, controller: BrowserController, navigation: NavigationResult
+    ) -> CheckOutcome:
+        method = getattr(self, "_eval_" + check.id.split(".", 1)[-1], None)
+        if method is None:
+            return CheckOutcome(
+                status=CheckStatus.ERROR.value,
+                actual="No browser evaluator is registered for '{}'.".format(check.id),
+            )
+        try:
+            outcome = method(controller, navigation)
+            if not outcome.evidence:
+                outcome.evidence = self._common_evidence(controller)
+            return outcome
+        except Exception as exc:
+            return CheckOutcome(
+                status=CheckStatus.ERROR.value,
+                actual="Browser check crashed: {}: {}".format(type(exc).__name__, redact_text(str(exc))),
+                evidence=self._common_evidence(controller),
+                metadata={"error": redact_text(str(exc))},
+            )
+
+    def _eval_load(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        if navigation.error:
+            outcome.add_finding(
+                title="The live target could not be loaded",
+                severity=Severity.HIGH.value,
+                domain="functional",
+                strength=Strength.OBSERVED.value,
+                consequence="No customer can complete a journey if the page does not render.",
+                location=sanitize_url(navigation.url),
+                reproduction="Open the target URL in a clean browser session and observe the navigation error.",
+                remediation="Confirm the service is reachable, the URL is correct, and TLS is valid.",
+                verification="Re-run the harness and confirm a 2xx/3xx response and visible content.",
+                tags=["runtime", "navigation"],
+            )
+            outcome.actual = "Navigation failed: {}".format(navigation.error)
+            return outcome
+        if navigation.status is not None and navigation.status >= 400:
+            outcome.add_finding(
+                title="The live target returned HTTP {}".format(navigation.status),
+                severity=Severity.HIGH.value if navigation.status >= 500 else Severity.MEDIUM.value,
+                domain="functional",
+                strength=Strength.OBSERVED.value,
+                consequence="Customers see an error or an incomplete surface instead of the intended product.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Request the URL and inspect the status code and response body.",
+                remediation="Fix the server route, dependency, or deployment failure and add a smoke check.",
+                verification="Confirm a 2xx/3xx response and the expected page title.",
+                tags=["runtime", "http-status"],
+            )
+        title = str(controller.snapshot.get("title", "")).strip()
+        if not title:
+            outcome.add_finding(
+                title="The rendered page has no title",
+                severity=Severity.MEDIUM.value,
+                domain="content",
+                strength=Strength.OBSERVED.value,
+                consequence="Customers, tabs, and assistive technology lack a concise page identity.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Inspect document.title after load.",
+                remediation="Set a unique, descriptive title for every route.",
+                verification="Confirm the title is present and specific to the page.",
+                tags=["content", "title"],
+            )
+        body_length = int(controller.snapshot.get("bodyTextLength", 0) or 0)
+        if body_length < 20:
+            outcome.add_finding(
+                title="The rendered page has little or no visible content",
+                severity=Severity.MEDIUM.value,
+                domain="functional",
+                strength=Strength.OBSERVED.value,
+                consequence="A blank or placeholder page can look like a successful response while delivering nothing.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Load the page and inspect the visible body text.",
+                remediation="Confirm data loading, error handling, and the empty-state experience.",
+                verification="Confirm the page shows the intended content or an explicit empty state.",
+                tags=["runtime", "empty-state"],
+            )
+        outcome.actual = "HTTP {}; title {!r}; visible text length {}".format(
+            navigation.status, title[:80], body_length
+        )
+        if not outcome.findings:
+            outcome.status = CheckStatus.PASSED.value
+        return outcome
+
+    def _eval_console(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        errors = [item for item in controller.console_messages if item.get("type") == "error"]
+        errors.extend(controller.page_errors)
+        if not errors:
+            outcome.actual = "No console errors or unhandled page errors were observed."
+            outcome.status = CheckStatus.PASSED.value
+            return outcome
+        for item in errors[:5]:
+            text = str(item.get("text", ""))[:180]
+            outcome.add_finding(
+                title="Runtime console error: {}".format(text[:80]),
+                severity=Severity.MEDIUM.value,
+                domain="reliability",
+                strength=Strength.OBSERVED.value,
+                consequence="A runtime exception can break interactive behavior that a static screenshot appears to pass.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Open the browser console and reproduce the page load.",
+                remediation="Fix the exception and add a regression check around the affected interaction.",
+                verification="Reload the page and confirm the console remains clean.",
+                tags=["console", "runtime"],
+            )
+        outcome.actual = "{} console/page error(s) observed.".format(len(errors))
+        return outcome
+
+    def _eval_network(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        problems = []
+        for entry in controller.network_entries:
+            if entry.get("failed"):
+                problems.append(entry)
+            elif isinstance(entry.get("status"), int) and entry["status"] >= 400:
+                if entry["status"] == 404 and "favicon" in entry.get("url", ""):
+                    continue
+                problems.append(entry)
+        if not problems:
+            outcome.actual = "{} request(s); no failed or unexpected 4xx/5xx responses.".format(
+                len(controller.network_entries)
+            )
+            outcome.status = CheckStatus.PASSED.value
+            return outcome
+        for entry in problems[:5]:
+            status = entry.get("status")
+            severity = Severity.HIGH.value if status is None or int(status) >= 500 else Severity.MEDIUM.value
+            outcome.add_finding(
+                title="Network request failed: {} {}".format(entry.get("method", "GET"), entry.get("url", "")[:100]),
+                severity=severity,
+                domain="reliability",
+                strength=Strength.OBSERVED.value,
+                consequence="A missing API or asset can leave a customer journey incomplete.",
+                location=sanitize_url(entry.get("url", "")),
+                reproduction="Load the page and inspect the failed request in the network log.",
+                remediation="Fix the endpoint, credential, or asset path; add a smoke assertion for the request.",
+                verification="Confirm the request succeeds with a 2xx/3xx response.",
+                tags=["network", "runtime"],
+            )
+        outcome.actual = "{} request(s); {} failed or non-success response(s).".format(
+            len(controller.network_entries), len(problems)
+        )
+        return outcome
+
+    def _eval_security(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        final_url = navigation.final_url or navigation.url
+        is_https = final_url.lower().startswith("https://")
+        headers = navigation.headers
+        missing: List[str] = []
+        if is_https and "strict-transport-security" not in headers:
+            missing.append("Strict-Transport-Security")
+        if "content-security-policy" not in headers and "content-security-policy-report-only" not in headers:
+            missing.append("Content-Security-Policy")
+        if "x-content-type-options" not in headers:
+            missing.append("X-Content-Type-Options")
+        if "x-frame-options" not in headers and "frame-ancestors" not in headers.get("content-security-policy", ""):
+            missing.append("frame protection (X-Frame-Options or CSP frame-ancestors)")
+        if "referrer-policy" not in headers:
+            missing.append("Referrer-Policy")
+        if not is_https:
+            outcome.add_finding(
+                title="The live target is served over plain HTTP",
+                severity=Severity.HIGH.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="Credentials, session cookies, and page content can be read or altered in transit.",
+                location=sanitize_url(final_url),
+                reproduction="Inspect the final URL scheme in the browser.",
+                remediation="Serve the product over HTTPS and redirect HTTP traffic.",
+                verification="Confirm HTTP redirects to HTTPS and HSTS is present.",
+                tags=["transport", "tls"],
+            )
+        if missing:
+            outcome.add_finding(
+                title="Baseline security headers are missing: {}".format(", ".join(missing)),
+                severity=Severity.MEDIUM.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="The browser has fewer defenses against injection, MIME confusion, framing, and referrer leakage.",
+                location=sanitize_url(final_url),
+                reproduction="Inspect the response headers for the landing document.",
+                remediation="Add the missing headers at the edge and tune CSP for the application's real resources.",
+                verification="Re-request the page and confirm every baseline header is present.",
+                tags=["headers", "hardening"],
+            )
+        mixed = self._mixed_content(controller.snapshot, is_https)
+        if mixed:
+            outcome.add_finding(
+                title="The page loads insecure resources or links on an HTTPS page",
+                severity=Severity.HIGH.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="Mixed content can be modified in transit or blocked by the browser.",
+                location=sanitize_url(final_url),
+                reproduction="Inspect script/link/form URLs that start with http:// on the page.",
+                remediation="Serve every resource over HTTPS and update hard-coded URLs.",
+                verification="Re-run the check and confirm no http:// resources remain.",
+                tags=["mixed-content", "transport"],
+            )
+        insecure_forms = [
+            form for form in controller.snapshot.get("forms", []) if str(form.get("action", "")).lower().startswith("http://")
+        ]
+        if insecure_forms:
+            outcome.add_finding(
+                title="A form submits over plain HTTP",
+                severity=Severity.HIGH.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="Form data, including credentials or payment details, can be intercepted.",
+                location=sanitize_url(final_url),
+                reproduction="Inspect form action attributes for http:// targets.",
+                remediation="Submit forms to HTTPS endpoints only.",
+                verification="Confirm the action is HTTPS and the browser does not warn.",
+                tags=["forms", "transport"],
+            )
+        weak_cookies = [
+            cookie
+            for cookie in controller.cookies
+            if any(token in str(cookie.get("name", "")).lower() for token in ("session", "sid", "auth", "token", "jwt"))
+            and (not cookie.get("secure") or not cookie.get("http_only"))
+        ]
+        if weak_cookies:
+            outcome.add_finding(
+                title="Session-like cookies lack Secure or HttpOnly flags",
+                severity=Severity.MEDIUM.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="Script or network access can steal a session that should be protected.",
+                location=", ".join(sorted({str(cookie.get("name")) for cookie in weak_cookies})),
+                reproduction="Inspect Set-Cookie/response cookie flags for session-like names.",
+                remediation="Set Secure, HttpOnly, and an appropriate SameSite value.",
+                verification="Re-load the page and confirm the flags on every session cookie.",
+                tags=["cookies", "session"],
+            )
+        outcome.actual = "HTTPS={}; missing headers: {}; mixed content: {}; weak cookies: {}".format(
+            is_https,
+            ", ".join(missing) or "none",
+            len(mixed),
+            len(weak_cookies),
+        )
+        if not outcome.findings:
+            outcome.status = CheckStatus.PASSED.value
+        return outcome
+
+    @staticmethod
+    def _mixed_content(snapshot: Dict[str, Any], is_https: bool) -> List[str]:
+        if not is_https:
+            return []
+        urls: List[str] = []
+        for script in snapshot.get("scripts", []):
+            if str(script).lower().startswith("http://"):
+                urls.append(str(script))
+        for link in snapshot.get("links", []):
+            if str(link.get("href", "")).lower().startswith("http://"):
+                urls.append(str(link.get("href")))
+        for form in snapshot.get("forms", []):
+            if str(form.get("action", "")).lower().startswith("http://"):
+                urls.append(str(form.get("action")))
+        return urls[:20]
+
+    def _eval_accessibility(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        snapshot = controller.snapshot
+        images = [item for item in snapshot.get("images", []) if not item.get("altPresent")]
+        unlabeled = []
+        for item in snapshot.get("inputs", []):
+            if item.get("type") in ("hidden", "submit", "button", "reset", "image"):
+                continue
+            if not item.get("hasLabel"):
+                unlabeled.append(item)
+        unnamed = [item for item in snapshot.get("controls", []) if not str(item.get("name", "")).strip()]
+        if images:
+            outcome.add_finding(
+                title="{} image(s) are missing an alt attribute".format(len(images)),
+                severity=Severity.MEDIUM.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Screen-reader users may miss information or hear an unhelpful URL.",
+                location=", ".join(item.get("selector", "") for item in images[:5]),
+                reproduction="Inspect the accessibility tree for images without an accessible name.",
+                remediation="Add meaningful alt text, or alt=\"\" for purely decorative images.",
+                verification="Confirm every image has an intentional alternative in the browser tree.",
+                tags=["a11y", "images"],
+            )
+        if unlabeled:
+            outcome.add_finding(
+                title="{} form control(s) may lack a programmatic label".format(len(unlabeled)),
+                severity=Severity.MEDIUM.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Assistive-technology users may not know what the field expects.",
+                location=", ".join(item.get("selector", "") for item in unlabeled[:5]),
+                reproduction="Inspect each control's accessible name and visible label.",
+                remediation="Associate a persistent visible label; placeholders are not labels.",
+                verification="Confirm every control has a meaningful accessible name.",
+                tags=["a11y", "forms"],
+            )
+        if unnamed:
+            outcome.add_finding(
+                title="{} interactive control(s) have no accessible name".format(len(unnamed)),
+                severity=Severity.MEDIUM.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="A keyboard or screen-reader user cannot tell what the control does.",
+                location=", ".join(item.get("selector", "") for item in unnamed[:5]),
+                reproduction="Inspect the accessibility tree for buttons and links with empty names.",
+                remediation="Add visible text, aria-label, or aria-labelledby; icon-only controls need a name.",
+                verification="Confirm every control announces a useful name and role.",
+                tags=["a11y", "controls"],
+            )
+        if snapshot.get("duplicateIds"):
+            outcome.add_finding(
+                title="{} duplicate element id(s) were found".format(len(snapshot["duplicateIds"])),
+                severity=Severity.LOW.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Labels and references can point at the wrong element, confusing assistive technology.",
+                location=", ".join(str(item) for item in snapshot["duplicateIds"][:5]),
+                reproduction="Inspect the DOM for repeated id values.",
+                remediation="Make ids unique or use refs/relationships instead of global ids.",
+                verification="Re-scan the DOM and confirm ids are unique.",
+                tags=["a11y", "dom"],
+            )
+        if int(snapshot.get("positiveTabindex", 0) or 0) > 0:
+            outcome.add_finding(
+                title="Positive tabindex values change the natural focus order",
+                severity=Severity.LOW.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Keyboard users can be sent to unexpected controls and lose context.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Tab through the page and compare focus order with the visual order.",
+                remediation="Rely on DOM order; use tabindex 0 or -1 only where necessary.",
+                verification="Confirm the focus order follows the reading order.",
+                tags=["a11y", "keyboard"],
+            )
+        if not str(snapshot.get("lang", "")).strip():
+            outcome.add_finding(
+                title="The document language is not declared",
+                severity=Severity.LOW.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Screen readers may pronounce content with the wrong language rules.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Inspect the html element's lang attribute.",
+                remediation="Declare a valid language such as lang=\"en\".",
+                verification="Confirm the language is exposed in the accessibility tree.",
+                tags=["a11y", "language"],
+            )
+        outcome.actual = "{} image(s) without alt; {} unlabeled control(s); {} unnamed control(s); {} duplicate id(s).".format(
+            len(images), len(unlabeled), len(unnamed), len(snapshot.get("duplicateIds", []))
+        )
+        outcome.metadata["manual_review_required"] = True
+        if not outcome.findings:
+            outcome.status = CheckStatus.PASSED.value
+        return outcome
+
+    def _eval_content(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        snapshot = controller.snapshot
+        h1s = snapshot.get("h1s", [])
+        title = str(snapshot.get("title", "")).strip()
+        if len(h1s) != 1:
+            outcome.add_finding(
+                title="The page has {} primary heading(s) instead of one".format(len(h1s)),
+                severity=Severity.LOW.value,
+                domain="content",
+                strength=Strength.OBSERVED.value,
+                consequence="Customers and assistive technology receive an ambiguous page outline.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Inspect the rendered heading structure.",
+                remediation="Use one descriptive h1 and a coherent heading hierarchy.",
+                verification="Confirm one h1 and a logical outline in the accessibility tree.",
+                tags=["content", "headings"],
+            )
+        if title and (len(title) < 10 or len(title) > 70):
+            outcome.add_finding(
+                title="The page title is outside a useful length range",
+                severity=Severity.LOW.value,
+                domain="content",
+                strength=Strength.OBSERVED.value,
+                consequence="The page identity is truncated or too vague in tabs and search results.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Measure the rendered document title.",
+                remediation="Write a concise, specific title between roughly 10 and 70 characters.",
+                verification="Confirm the title remains readable when truncated.",
+                tags=["content", "title"],
+            )
+        outcome.actual = "h1 count: {}; title length: {}; text length: {}".format(
+            len(h1s), len(title), snapshot.get("bodyTextLength", 0)
+        )
+        if not outcome.findings:
+            outcome.status = CheckStatus.PASSED.value
+        return outcome
+
+    def _eval_links(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        is_https = (navigation.final_url or navigation.url).lower().startswith("https://")
+        links = controller.snapshot.get("links", [])
+        empty = [item for item in links if str(item.get("href", "")).strip() in ("", "#") or str(item.get("href", "")).lower().startswith("javascript:")]
+        insecure = [item for item in links if is_https and str(item.get("href", "")).lower().startswith("http://")]
+        unsafe_target = [
+            item
+            for item in links
+            if str(item.get("target", "")).lower() == "_blank"
+            and "noopener" not in str(item.get("rel", "")).lower()
+            and "noreferrer" not in str(item.get("rel", "")).lower()
+        ]
+        if empty:
+            outcome.add_finding(
+                title="{} link(s) are empty, placeholder, or javascript: targets".format(len(empty)),
+                severity=Severity.LOW.value,
+                domain="functional",
+                strength=Strength.OBSERVED.value,
+                consequence="A customer can hit a dead end or a control that looks interactive but does nothing.",
+                location=", ".join(item.get("selector", "") for item in empty[:5]),
+                reproduction="Inspect the href values in the rendered DOM.",
+                remediation="Point links at a real destination or render a non-interactive element.",
+                verification="Click each link and confirm a meaningful destination or disabled state.",
+                tags=["links", "dead-end"],
+            )
+        if insecure:
+            outcome.add_finding(
+                title="{} link(s) point at plain HTTP from an HTTPS page".format(len(insecure)),
+                severity=Severity.MEDIUM.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="A customer can be downgraded to an interceptable destination.",
+                location=", ".join(item.get("selector", "") for item in insecure[:5]),
+                reproduction="Inspect the href values for http:// destinations.",
+                remediation="Use HTTPS destinations and fix hard-coded URLs.",
+                verification="Re-scan and confirm no http:// links remain.",
+                tags=["links", "transport"],
+            )
+        if unsafe_target:
+            outcome.add_finding(
+                title="{} new-tab link(s) omit noopener/noreferrer".format(len(unsafe_target)),
+                severity=Severity.LOW.value,
+                domain="security",
+                strength=Strength.OBSERVED.value,
+                consequence="The opened page can access window.opener and navigate the original tab.",
+                location=", ".join(item.get("selector", "") for item in unsafe_target[:5]),
+                reproduction="Inspect target=\"_blank\" links and their rel attribute.",
+                remediation="Add rel=\"noopener noreferrer\" to new-tab links.",
+                verification="Re-scan and confirm the relationship is present.",
+                tags=["links", "tabnabbing"],
+            )
+        outcome.actual = "{} link(s); {} placeholder; {} insecure; {} missing noopener.".format(
+            len(links), len(empty), len(insecure), len(unsafe_target)
+        )
+        if not outcome.findings:
+            outcome.status = CheckStatus.PASSED.value
+        return outcome

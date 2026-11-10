@@ -1,0 +1,33 @@
+# Persona contracts
+
+Each Markdown file in this directory is a specialist contract loaded by the
+harness. A persona is not a prompt fragment: it declares which domains it owns,
+which tools it may use, which checks it can own, the JSON shape of its findings,
+and when it must refuse.
+
+## Required shape
+
+1. YAML frontmatter delimited by `---` with non-empty `id`, `name`, `version`,
+   `domains`, `tools`, and `checks`.
+2. A `## Role` section that states the judgment the specialist makes.
+3. A `## Available tools` section with a tool table and explicit boundaries.
+4. A `## Output schema` section containing one fenced `json` block. The schema
+   must be an object with a non-empty `required` array and `properties`.
+5. A `## Refusal handling` section that lists concrete refusal conditions and
+   requires a structured blocker instead of a pass.
+
+Every check ID in frontmatter must exist in `harness/checks.py`. Validate the
+whole directory with:
+
+```bash
+python -m harness personas --personas-dir personas
+```
+
+## Rules
+
+- One persona owns one check. Do not duplicate a check across personas.
+- A persona must never convert a blocked or refused check into a passing score.
+- Tools are capabilities, not suggestions. If a tool is not listed, the persona
+  may not use it.
+- Add a persona only when it owns a distinct risk domain and has a distinct
+  output contract. A new file must not exist just to increase the count.

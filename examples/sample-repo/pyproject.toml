@@ -1,0 +1,9 @@
+[project]
+name = "sample-service"
+version = "0.3.0"
+description = "Deliberately imperfect fixture used by the quality harness examples."
+requires-python = ">=3.8"
+dependencies = ["flask>=2.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
