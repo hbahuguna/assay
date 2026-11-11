@@ -127,6 +127,19 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--browser-video", action="store_true", help="Capture browser video for browser runs.")
     run.add_argument("--storage-state", help="Path or env:VAR reference to a Playwright storage state file.")
     run.add_argument("--policy", help="Path to a versioned policy JSON file.")
+    run.add_argument(
+        "--fail-on-score-regression",
+        dest="score_regression_threshold",
+        type=float,
+        default=None,
+        help="Exit 1 when the score drops by at least this many points versus the previous run.",
+    )
+    run.add_argument(
+        "--score-regression-threshold",
+        dest="score_regression_threshold",
+        type=float,
+        help="Alias for --fail-on-score-regression.",
+    )
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
     run.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
@@ -285,6 +298,13 @@ def _run(args: argparse.Namespace) -> int:
         if any(severity_rank(finding.get("severity", "")) >= threshold for finding in report.get("findings", [])):
             policy_failed = True
     if args.min_score is not None and report.get("confidence", {}).get("score", 0) < args.min_score:
+        policy_failed = True
+    trend = report.get("trend", {})
+    if (
+        args.score_regression_threshold is not None
+        and not bool(trend.get("baseline", True))
+        and float(trend.get("score_delta", 0.0)) < -args.score_regression_threshold
+    ):
         policy_failed = True
     if policy_failed:
         return 1

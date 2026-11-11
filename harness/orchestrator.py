@@ -955,6 +955,62 @@ class Orchestrator:
         self.state.blockers.append(record)
         return record
 
+    def _compute_trend(self) -> Dict[str, Any]:
+        assert self.state is not None
+        history = self.state_store.load_history()
+        previous = None
+        for entry in history.get("runs", []):
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("run_id") == self.state.run_id:
+                continue
+            target = entry.get("target", {})
+            if not isinstance(target, dict):
+                continue
+            if target.get("raw") != self.state.target.raw:
+                continue
+            previous = entry
+            break
+
+        current_fingerprints = sorted(
+            {finding.fingerprint for finding in self.state.findings if finding.fingerprint}
+        )
+        current_set = set(current_fingerprints)
+        if previous is None:
+            return {
+                "baseline": True,
+                "previous_run_id": None,
+                "new": [],
+                "resolved": [],
+                "persistent": [],
+                "score_delta": 0.0,
+                "coverage_delta": 0.0,
+            }
+
+        previous_fingerprints = [
+            str(item) for item in previous.get("finding_fingerprints", []) if item
+        ]
+        previous_set = set(previous_fingerprints)
+        try:
+            previous_score = float(previous.get("score", 0.0))
+        except (TypeError, ValueError):
+            previous_score = 0.0
+        try:
+            previous_coverage = float(previous.get("finding_counts", {}).get("total", 0)) if False else 0.0
+        except (TypeError, ValueError):
+            previous_coverage = 0.0
+        # Coverage is not stored in history; keep the delta explicit as 0.0
+        # rather than fabricating one from unrelated finding counts.
+        return {
+            "baseline": False,
+            "previous_run_id": previous.get("run_id"),
+            "new": sorted(current_set - previous_set),
+            "resolved": sorted(previous_set - current_set),
+            "persistent": sorted(current_set & previous_set),
+            "score_delta": round(self.state.confidence.score - previous_score, 1),
+            "coverage_delta": 0.0,
+        }
+
     def _record_outcome(self, check: Check, outcome: CheckOutcome) -> bool:
         assert self.state is not None
         blocker_draft = (
@@ -1264,6 +1320,7 @@ class Orchestrator:
             policy=self.policy,
         )
         self.state.confidence = confidence
+        self.state.options["trend"] = self._compute_trend()
         self._finish_phase(
             phase,
             PhaseStatus.COMPLETED.value,

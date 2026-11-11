@@ -60,6 +60,10 @@ python -m harness junit --root .harness-demo --output junit.xml
 python -m harness sign-report --root .harness-demo --key "$REPORT_SIGNING_KEY"
 python -m harness verify-report --root .harness-demo --signature .harness-demo/.harness/report.sig --key "$REPORT_SIGNING_KEY"
 
+# Compare with the previous run for the same target.
+python -m harness run --target examples/sample-repo --no-browser \
+  --fail-on-score-regression 5 --root .harness-demo
+
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
 python -m harness report --root .harness-demo

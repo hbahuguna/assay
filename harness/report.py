@@ -121,6 +121,18 @@ def build_report(
         policy_info = {}
     policy_id = str(policy_info.get("id", "advisory-v1"))
     policy_version = str(policy_info.get("version", "1.0"))
+    trend = state.options.get("trend", {}) if isinstance(state.options, dict) else {}
+    if not isinstance(trend, dict):
+        trend = {}
+    trend = {
+        "baseline": bool(trend.get("baseline", True)),
+        "previous_run_id": trend.get("previous_run_id"),
+        "new": list(trend.get("new", [])),
+        "resolved": list(trend.get("resolved", [])),
+        "persistent": list(trend.get("persistent", [])),
+        "score_delta": float(trend.get("score_delta", 0.0)),
+        "coverage_delta": float(trend.get("coverage_delta", 0.0)),
+    }
     personas = []
     for persona in state.personas:
         entry = dict(persona)
@@ -206,6 +218,7 @@ def build_report(
         "intent": state.intent,
         "policy": {"id": policy_id, "version": policy_version},
         "decision": decision,
+        "trend": trend,
         "confidence": state.confidence.to_dict(),
         "findings": [finding.to_dict() for finding in findings],
         "finding_counts": severity_counts,

@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-017 - Add run-to-run trend diff
-
-- **Epic:** E4 Release Confidence and Reporting
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-005, QH-015
-- **Status:** Ready
-- **Description:** Compare the current run with the previous run for the same
-  target and report new, resolved, and persistent findings plus score and
-  coverage deltas.
-- **Acceptance Criteria:**
-  - Findings are matched by fingerprint, not title text alone.
-  - The report includes `trend.new`, `trend.resolved`, `trend.persistent`, and
-    `trend.score_delta`.
-  - A first run reports `trend.baseline: true` with no fabricated delta.
-  - The CLI exits non-zero on a configurable score regression.
-
 ### QH-018 - Add baseline suppression with owner and expiry
 
 - **Epic:** E4 Release Confidence and Reporting
@@ -489,7 +472,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-016` are complete, so `QH-017` is now
+No task is claimed. `QH-001` through `QH-017` are complete, so `QH-018` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task.
 
@@ -927,6 +910,29 @@ commercial-critical-path task.
   verifies rule/result mapping, JUnit statuses, signature verification and
   tamper detection, and redaction. Full suite: 118 passing tests with Python
   3.11.
+
+### QH-017 - Add run-to-run trend diff
+
+- **Epic:** E4 Release Confidence and Reporting
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-005, QH-015
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Compare the current run with the previous run for the same
+  target and report new, resolved, and persistent findings by fingerprint,
+  plus score and coverage deltas. First runs report `trend.baseline: true`.
+- **Acceptance Criteria:**
+  - Findings are matched by fingerprint, not title text alone.
+  - The report includes `trend.new`, `trend.resolved`, `trend.persistent`, and
+    `trend.score_delta`.
+  - A first run reports `trend.baseline: true` with no fabricated delta.
+  - The CLI exits non-zero on a configurable score regression.
+- **Evidence:** `tests/test_trend.py` verifies baseline runs, persistent
+  findings across repeated runs, and a non-zero CLI exit on a score
+  regression. History entries now store finding fingerprints. Full suite: 121
+  passing tests with Python 3.11. `README.md` documents
+  `--fail-on-score-regression`.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

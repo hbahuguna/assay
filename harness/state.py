@@ -226,6 +226,7 @@ class StateStore:
             "score": state.confidence.score,
             "decision": decision.get("decision", "review"),
             "finding_counts": finding_counts,
+            "finding_fingerprints": sorted({finding.fingerprint for finding in state.findings if finding.fingerprint}),
             "evidence_path": evidence_path,
             "started_at": state.started_at,
             "completed_at": state.completed_at,
