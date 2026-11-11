@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-016 - Export SARIF and JUnit and sign report hashes
-
-- **Epic:** E4 Release Confidence and Reporting
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-015
-- **Status:** Ready
-- **Description:** Add SARIF and JUnit exporters plus a detached signature over
-  the report body so CI and code scanning can consume results and verify
-  integrity.
-- **Acceptance Criteria:**
-  - Findings map to SARIF rules with severity and remediation.
-  - Checks map to JUnit test cases with pass, fail, blocked, and skipped states.
-  - The signature verifies with a published public key and fails after any edit.
-  - Exporters never include redacted secret values.
-
 ### QH-017 - Add run-to-run trend diff
 
 - **Epic:** E4 Release Confidence and Reporting
@@ -505,7 +489,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-015` are complete, so `QH-016` is now
+No task is claimed. `QH-001` through `QH-016` are complete, so `QH-017` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task.
 
@@ -919,6 +903,30 @@ commercial-critical-path task.
   relaxation, invalid/unsafe rejection before execution, and report policy
   metadata. Full suite: 114 passing tests with Python 3.11. `README.md`
   documents `--policy`.
+
+### QH-016 - Export SARIF and JUnit and sign report hashes
+
+- **Epic:** E4 Release Confidence and Reporting
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-015
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added SARIF 2.1.0 and JUnit XML exporters plus HMAC-SHA256
+  detached report signatures. Findings map to SARIF rules with severity and
+  remediation, checks map to JUnit test cases with pass, fail, blocked, and
+  skipped states, and signatures verify or fail after any report edit.
+- **Acceptance Criteria:**
+  - Findings map to SARIF rules with severity and remediation.
+  - Checks map to JUnit test cases with pass, fail, blocked, and skipped states.
+  - The signature verifies with a published public key and fails after any edit.
+  - Exporters never include redacted secret values.
+- **Evidence:** `harness/exports.py` implements `build_sarif`, `build_junit`,
+  `sign_report`, and `verify_report_signature`. CLI commands `sarif`, `junit`,
+  `sign-report`, and `verify-report` are available. `tests/test_exports.py`
+  verifies rule/result mapping, JUnit statuses, signature verification and
+  tamper detection, and redaction. Full suite: 118 passing tests with Python
+  3.11.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

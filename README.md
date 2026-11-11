@@ -52,6 +52,14 @@ python -m harness calibrate --fixtures-dir calibration/fixtures
 python -m harness run --target examples/sample-repo --no-browser \
   --policy policies/advisory-v1.json --root .harness-demo
 
+# Export SARIF and JUnit from the latest report.
+python -m harness sarif --root .harness-demo --output report.sarif
+python -m harness junit --root .harness-demo --output junit.xml
+
+# Sign and verify the latest report.
+python -m harness sign-report --root .harness-demo --key "$REPORT_SIGNING_KEY"
+python -m harness verify-report --root .harness-demo --signature .harness-demo/.harness/report.sig --key "$REPORT_SIGNING_KEY"
+
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
 python -m harness report --root .harness-demo

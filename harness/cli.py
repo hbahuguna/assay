@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional
 from . import __version__
 from .calibration import run_calibration, write_calibration_report
 from .errors import HarnessError, PersonaError
+from .exports import build_junit, build_sarif, sign_report, verify_report_signature
+from .exports import build_junit, build_sarif, sign_report, verify_report_signature
 from .models import CheckStatus, Severity, severity_rank, utc_now
 from .orchestrator import Orchestrator, RunOptions
 from .personas import lint_personas, load_personas, scaffold_persona
@@ -201,6 +203,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow 'personas scaffold' to overwrite an existing contract.",
     )
+
+    sarif = subparsers.add_parser("sarif", help="Export the latest report as SARIF JSON.")
+    sarif.add_argument("--root", default=".")
+    sarif.add_argument("--output", help="Write SARIF to this path instead of stdout.")
+
+    junit = subparsers.add_parser("junit", help="Export the latest report as JUnit XML.")
+    junit.add_argument("--root", default=".")
+    junit.add_argument("--output", help="Write JUnit XML to this path instead of stdout.")
+
+    sign_report_parser = subparsers.add_parser("sign-report", help="Create a detached HMAC signature for the latest report.")
+    sign_report_parser.add_argument("--root", default=".")
+    sign_report_parser.add_argument("--key", required=True, help="Signing key (string or path).")
+    sign_report_parser.add_argument("--output", help="Write the signature to this path.")
+
+    verify_report = subparsers.add_parser("verify-report", help="Verify a detached report signature.")
+    verify_report.add_argument("--root", default=".")
+    verify_report.add_argument("--signature", required=True, help="Signature hex string or path to a signature file.")
+    verify_report.add_argument("--key", required=True, help="Verification key (string or path).")
 
     calibrate = subparsers.add_parser(
         "calibrate",
@@ -484,6 +504,160 @@ def _calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_key(value: str) -> str:
+    path = Path(value).expanduser()
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return value
+
+
+def _sarif(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    sarif = build_sarif(report)
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.is_absolute():
+            output_path = Path.cwd() / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(sarif, indent=2, ensure_ascii=False), encoding="utf-8")
+        _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
+    else:
+        _print_json(sarif)
+    return 0
+
+
+def _junit(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    xml_text = build_junit(report)
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.is_absolute():
+            output_path = Path.cwd() / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(xml_text, encoding="utf-8")
+        _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
+    else:
+        print(xml_text)
+    return 0
+
+
+def _sign_report(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    signature = sign_report(report, _read_key(args.key))
+    output_path = Path(args.output).expanduser() if args.output else store.root / "report.sig"
+    if not output_path.is_absolute():
+        output_path = Path.cwd() / output_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(signature, encoding="utf-8")
+    _print_json(
+        {
+            "schema_version": REPORT_SCHEMA,
+            "status": "signed",
+            "signature": signature,
+            "path": str(output_path),
+        }
+    )
+    return 0
+
+
+def _verify_report(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    signature_value = args.signature
+    signature_path = Path(signature_value).expanduser()
+    if signature_path.is_file():
+        signature_value = signature_path.read_text(encoding="utf-8").strip()
+    valid = verify_report_signature(report, signature_value, _read_key(args.key))
+    _print_json(
+        {
+            "schema_version": REPORT_SCHEMA,
+            "status": "valid" if valid else "invalid",
+            "verified": valid,
+        }
+    )
+    return 0 if valid else 1
+
+
+def _sarif(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    sarif = build_sarif(report)
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.is_absolute():
+            output_path = Path.cwd() / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(sarif, indent=2, ensure_ascii=False), encoding="utf-8")
+        _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
+    else:
+        _print_json(sarif)
+    return 0
+
+
+def _junit(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    xml_text = build_junit(report)
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.is_absolute():
+            output_path = Path.cwd() / output_path
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(xml_text, encoding="utf-8")
+        _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
+    else:
+        print(xml_text)
+    return 0
+
+
+def _read_key(value: str) -> str:
+    path = Path(value).expanduser()
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return value
+
+
+def _sign_report(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    signature = sign_report(report, _read_key(args.key))
+    output_path = Path(args.output).expanduser() if args.output else store.root / "report.sig"
+    if not output_path.is_absolute():
+        output_path = Path.cwd() / output_path
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(signature, encoding="utf-8")
+    _print_json(
+        {
+            "schema_version": REPORT_SCHEMA,
+            "status": "signed",
+            "signature": signature,
+            "path": str(output_path),
+        }
+    )
+    return 0
+
+
+def _verify_report(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    report = store.load_report()
+    signature_value = args.signature
+    signature_path = Path(signature_value).expanduser()
+    if signature_path.is_file():
+        signature_value = signature_path.read_text(encoding="utf-8").strip()
+    valid = verify_report_signature(report, signature_value, _read_key(args.key))
+    _print_json(
+        {
+            "schema_version": REPORT_SCHEMA,
+            "status": "valid" if valid else "invalid",
+            "verified": valid,
+        }
+    )
+    return 0 if valid else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -505,6 +679,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _personas(args)
         if args.command == "calibrate":
             return _calibrate(args)
+        if args.command == "sarif":
+            return _sarif(args)
+        if args.command == "junit":
+            return _junit(args)
+        if args.command == "sign-report":
+            return _sign_report(args)
+        if args.command == "verify-report":
+            return _verify_report(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:
