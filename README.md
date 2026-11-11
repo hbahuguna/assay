@@ -40,6 +40,10 @@ python -m harness run \
 
 # Validate persona contracts.
 python -m harness personas --personas-dir personas
+python -m harness personas lint --personas-dir personas
+
+# Scaffold a new specialist contract without copying by hand.
+python -m harness personas scaffold reliability --personas-dir personas
 
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
@@ -311,7 +315,9 @@ Each file declares YAML frontmatter, role, available tools, a JSON output
 schema, a JSON blocker schema, and refusal handling. Check ownership is derived
 from the frontmatter `checks` lists. Every built-in check must be listed by
 exactly one persona; an unowned check fails planning and duplicate ownership is
-rejected before execution. See `personas/README.md`.
+rejected before execution. `personas lint` checks contracts across all files,
+and `personas scaffold <id>` creates a starter specialist contract that passes
+lint unchanged. See `personas/README.md`.
 
 A finding that violates its owner's output schema is quarantined before it can
 enter state as a normal finding. The report keeps the persona, check id,

@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-009 - Add persona lint and scaffold commands
-
-- **Epic:** E2 Specialist Persona Layer
-- **Priority:** P2
-- **Points:** 2
-- **Depends on:** QH-006
-- **Status:** Ready
-- **Description:** Add `personas lint` and `personas scaffold <id>` so adding a
-  specialist produces a valid contract without copying a file by hand.
-- **Acceptance Criteria:**
-  - `lint` reports missing sections, unknown check ids, duplicate ownership, and
-    schema violations with non-zero exit.
-  - `scaffold` writes a contract that passes `lint` unchanged.
-  - Scaffolding refuses to overwrite an existing persona without `--force`.
-  - Both commands emit JSON on stdout, consistent with the existing CLI.
-
 ### QH-010 - Add Playwright-enabled CI and a browser smoke fixture
 
 - **Epic:** E3 Inspect and Operate Evidence
@@ -620,10 +604,9 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-008` are complete, so `QH-009` is now
-the lowest-numbered unblocked task. `QH-019` remains the first
-commercial-critical-path task, and `QH-010` can proceed in parallel because it has
-no dependency.
+No task is claimed. `QH-001` through `QH-009` are complete, so `QH-010` is now
+the lowest-numbered unblocked task (and an unblocked P0). `QH-019` remains the
+first commercial-critical-path task.
 
 ## Blockers
 
@@ -847,6 +830,38 @@ no dependency.
   3.11. `README.md`, `personas/README.md`, and `examples/plugins/README.md`
   document the blocker contract.
 
+### QH-009 - Add persona lint and scaffold commands
+
+- **Epic:** E2 Specialist Persona Layer
+- **Priority:** P2
+- **Points:** 2
+- **Depends on:** QH-006
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added `personas lint` and `personas scaffold <id>` subcommands
+  to validate and generate specialist contracts. `lint` scans all persona Markdown
+  files in a directory, aggregating errors for missing sections, duplicate persona
+  IDs, unknown check IDs, duplicate check ownership, and schema definition
+  violations, exiting non-zero on failure. `scaffold` creates starter contracts
+  with complete frontmatter, role, tools table, output schema, blocker schema,
+  and refusal handling, writing atomically and refusing to overwrite existing files
+  without `--force`. Both commands emit machine-readable JSON on stdout.
+- **Acceptance Criteria:**
+  - `lint` reports missing sections, unknown check ids, duplicate ownership, and
+    schema violations with non-zero exit.
+  - `scaffold` writes a contract that passes `lint` unchanged.
+  - Scaffolding refuses to overwrite an existing persona without `--force`.
+  - Both commands emit JSON on stdout, consistent with the existing CLI.
+- **Evidence:** `tests/test_persona_tools.py` exercises both commands through the
+  CLI JSON contract. It verifies that clean personas pass lint with exit 0, that
+  a directory containing missing sections, unknown checks, duplicate ownership,
+  and missing required schema properties reports all failure categories with exit 1,
+  that `scaffold` creates a contract that passes `lint` unchanged (with a placeholder
+  check warning), that scaffolding refuses to overwrite existing files without `--force`
+  (exit 2), that `--force` overwrites successfully, and that custom domains and checks
+  are accepted. Full suite: 95 passing tests with Python 3.11. `README.md` and
+  `personas/README.md` document the commands.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -889,3 +904,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D16 | 2026-11-11 | Persona frontmatter is the only source of check ownership. The catalog's `persona` field is legacy plugin metadata and never drives planning. Built-in zero/multiple ownership is a fatal configuration error; plugin ownership failures are blocked coverage gaps. | A duplicated assignment can drift silently. Deriving owners from the contracts makes disjoint ownership machine-checkable, while preserving D13 for optional plugins. | Remove the legacy field after external plugins have migrated or a plugin schema v2 is published. |
 | D17 | 2026-11-11 | Findings are validated against the owning persona schema before normalization. Invalid drafts persist only as redacted `invalid_findings` records, never in scoring, finding counts, or kill-switch evaluation. Three consecutive invalid findings degrade the persona; a valid finding resets the streak. | Normalization can otherwise turn a malformed finding into an apparently valid one. Quarantining preserves the audit trail while preventing contract failures from inflating or deflating release confidence. | Add per-check contract-failure budgets or automatic remediation hints if specialist output quality becomes a recurring gap. |
 | D18 | 2026-11-11 | Every blocked check has exactly one persisted `Blocker`, validated against the owning persona's blocker schema and redacted before persistence. A blocked check carries zero findings, and a blocker-bearing outcome is forced to `blocked` even if a plugin reports `passed`. Planning failures materialize blockers before execution; runtime refusals replace them through the same one-per-check path. | A free-text blocked status hides why work stopped and whether it is covered elsewhere. A separate structured record preserves the refusal boundary without polluting findings, scoring, or the kill switch, and makes a blocked check impossible to misreport as a pass. | Add automatic `covered_by` resolution when another check's evidence covers the same risk, or add per-blocker expiry when a target changes. |
+| D19 | 2026-11-11 | `personas lint` aggregates all contract errors across all files rather than failing on the first error, exiting 1 on validation failure. `personas scaffold <id>` generates complete, valid contracts with a `plugin.<id>.placeholder` check so they pass lint immediately without duplicating ownership of built-in checks; lint treats these matching placeholders as advisory warnings. | Halting on the first file error forces tedious fix-and-rerun loops. Using a namespaced placeholder allows scaffolding a valid contract into an existing repo where all built-in checks are already claimed, keeping disjoint ownership invariant while avoiding false-positive errors. | When plugin authoring is expanded, allow `scaffold` to generate a companion plugin stub or register the placeholder in local dev configs. |

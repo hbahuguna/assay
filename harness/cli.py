@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import __version__
-from .errors import HarnessError
+from .errors import HarnessError, PersonaError
 from .models import CheckStatus, Severity, severity_rank, utc_now
 from .orchestrator import Orchestrator, RunOptions
-from .personas import load_personas
+from .personas import lint_personas, load_personas, scaffold_persona
+from .plugins import build_registry
 from .report import REPORT_SCHEMA
 from .state import StateStore
 
@@ -155,10 +156,41 @@ def build_parser() -> argparse.ArgumentParser:
     abort.add_argument("--reason", default="Manual kill requested by the operator.")
     abort.add_argument("--root", default=".")
 
-    personas = subparsers.add_parser("personas", help="List and validate loaded persona contracts as JSON.")
+    personas = subparsers.add_parser(
+        "personas",
+        help="List, lint, or scaffold persona contracts as JSON.",
+    )
+    personas.add_argument(
+        "personas_action",
+        nargs="?",
+        choices=("list", "lint", "scaffold"),
+        default="list",
+        help="Persona operation (default: list).",
+    )
+    personas.add_argument(
+        "persona_id",
+        nargs="?",
+        help="Persona id for 'personas scaffold <id>'.",
+    )
     personas.add_argument("--personas-dir", default="personas")
     personas.add_argument("--root", default=".")
     personas.add_argument("--select", help="Comma-separated persona ids to validate.")
+    personas.add_argument("--name", help="Display name for a scaffolded persona.")
+    personas.add_argument(
+        "--domain",
+        action="append",
+        help="Domain owned by a scaffolded persona; repeat for multiple domains.",
+    )
+    personas.add_argument(
+        "--check",
+        action="append",
+        help="Check id owned by a scaffolded persona; repeat for multiple checks.",
+    )
+    personas.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow 'personas scaffold' to overwrite an existing contract.",
+    )
 
     return parser
 
@@ -332,14 +364,21 @@ def _abort(args: argparse.Namespace) -> int:
     return 0
 
 
-def _personas(args: argparse.Namespace) -> int:
+def _resolve_personas_directory(args: argparse.Namespace) -> Path:
     root = Path(args.root).expanduser().resolve()
     personas_dir = Path(args.personas_dir).expanduser()
     if not personas_dir.is_absolute():
         cwd_candidate = Path.cwd() / personas_dir
         root_candidate = root / personas_dir
         personas_dir = cwd_candidate if cwd_candidate.is_dir() else root_candidate
-    personas = load_personas(personas_dir, selected=_csv(args.select) or None, require_minimum=0)
+    return personas_dir
+
+
+def _personas_list(args: argparse.Namespace) -> int:
+    personas_dir = _resolve_personas_directory(args)
+    personas = load_personas(
+        personas_dir, selected=_csv(args.select) or None, require_minimum=0
+    )
     payload = {
         "schema_version": "quality-harness.personas/v1",
         "directory": str(personas_dir),
@@ -362,6 +401,47 @@ def _personas(args: argparse.Namespace) -> int:
     }
     _print_json(payload)
     return 0
+
+
+def _personas_lint(args: argparse.Namespace) -> int:
+    root = Path(args.root).expanduser().resolve()
+    personas_dir = _resolve_personas_directory(args)
+    registry = build_registry(root, log=lambda message: None)
+    result = lint_personas(personas_dir, known_check_ids=registry.ids())
+    result["root"] = str(root)
+    _print_json(result)
+    return 0 if result["status"] == "valid" else 1
+
+
+def _personas_scaffold(args: argparse.Namespace) -> int:
+    if not args.persona_id:
+        raise PersonaError("personas scaffold requires a persona id.")
+    personas_dir = _resolve_personas_directory(args)
+    result = scaffold_persona(
+        args.persona_id,
+        personas_dir,
+        name=args.name,
+        domains=getattr(args, "domain", None),
+        checks=getattr(args, "check", None),
+        force=args.force,
+    )
+    _print_json(result)
+    return 0 if result["status"] in ("created", "overwritten") else 2
+
+
+def _personas(args: argparse.Namespace) -> int:
+    action = getattr(args, "personas_action", "list") or "list"
+    if action != "scaffold" and args.persona_id:
+        raise PersonaError(
+            "A persona id is only valid with 'personas scaffold <id>'."
+        )
+    if action == "list":
+        return _personas_list(args)
+    if action == "lint":
+        return _personas_lint(args)
+    if action == "scaffold":
+        return _personas_scaffold(args)
+    raise PersonaError("Unknown personas action: {}".format(action))
 
 
 def main(argv: Optional[List[str]] = None) -> int:

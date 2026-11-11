@@ -8,7 +8,9 @@ role, tools, output schema, blocker schema, and refusal handling.
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -25,6 +27,39 @@ REQUIRED_SECTIONS = [
 ]
 
 FRONTMATTER_KEYS = ["id", "name", "version", "domains", "tools", "checks"]
+
+PERSONA_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
+CHECK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
+DOMAIN_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
+
+CORE_FINDING_FIELDS = (
+    "title",
+    "severity",
+    "domain",
+    "strength",
+    "consequence",
+    "location",
+    "reproduction",
+    "remediation",
+    "verification",
+)
+CORE_BLOCKER_FIELDS = (
+    "persona",
+    "check_id",
+    "attempted_action",
+    "boundary",
+    "unblock_evidence",
+    "covered_elsewhere",
+)
+SUPPORTED_SCHEMA_TYPES = {
+    "object",
+    "array",
+    "string",
+    "number",
+    "integer",
+    "boolean",
+    "null",
+}
 
 
 @dataclass
@@ -369,3 +404,429 @@ def validate_persona_checks(personas: Iterable[Persona], known_check_ids: Iterab
                 persona_id, ", ".join(check_ids)
             )
         )
+
+
+# --------------------------------------------------------------------- tooling
+
+
+def _relative_file(path: Path, directory: Path) -> str:
+    try:
+        return path.relative_to(directory).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _lint_error_code(message: str) -> str:
+    text = message.lower()
+    if "missing required section" in text:
+        return "missing_section"
+    if "frontmatter" in text:
+        return "frontmatter"
+    if "output schema" in text or "blocker schema" in text:
+        return "schema"
+    if "section is empty" in text:
+        return "empty_section"
+    return "invalid_persona"
+
+
+def _schema_issues(persona: Persona) -> List[Dict[str, Any]]:
+    issues: List[Dict[str, Any]] = []
+    contracts = (
+        ("output", persona.output_schema, CORE_FINDING_FIELDS),
+        ("blocker", persona.blocker_schema, CORE_BLOCKER_FIELDS),
+    )
+    for label, schema, core_fields in contracts:
+        required = schema.get("required", [])
+        properties = schema.get("properties", {})
+        for field_name in core_fields:
+            if field_name not in required:
+                issues.append(
+                    {
+                        "code": "schema_required_field_missing",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema must require field '{}'.".format(
+                            label.title(), field_name
+                        ),
+                    }
+                )
+        for field_name in required:
+            if field_name not in properties:
+                issues.append(
+                    {
+                        "code": "schema_property_not_defined",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema requires '{}' but does not define it.".format(
+                            label.title(), field_name
+                        ),
+                    }
+                )
+        for field_name, child in properties.items():
+            if not isinstance(child, dict):
+                issues.append(
+                    {
+                        "code": "schema_property_invalid",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema property '{}' must be an object.".format(
+                            label.title(), field_name
+                        ),
+                    }
+                )
+                continue
+            expected_type = child.get("type")
+            if expected_type and expected_type not in SUPPORTED_SCHEMA_TYPES:
+                issues.append(
+                    {
+                        "code": "schema_type_unsupported",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema property '{}' uses unsupported type '{}'.".format(
+                            label.title(), field_name, expected_type
+                        ),
+                    }
+                )
+            if "enum" in child and not isinstance(child["enum"], list):
+                issues.append(
+                    {
+                        "code": "schema_enum_invalid",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema property '{}' enum must be an array.".format(
+                            label.title(), field_name
+                        ),
+                    }
+                )
+            if "items" in child and not isinstance(child["items"], dict):
+                issues.append(
+                    {
+                        "code": "schema_items_invalid",
+                        "schema": label,
+                        "field": field_name,
+                        "persona": persona.id,
+                        "message": "{} schema property '{}' items must be an object.".format(
+                            label.title(), field_name
+                        ),
+                    }
+                )
+    return issues
+
+
+def _is_scaffold_placeholder(persona: Persona, check_id: str) -> bool:
+    return check_id.startswith("plugin.{}.".format(persona.id))
+
+
+def lint_personas(
+    directory: Path, known_check_ids: Optional[Iterable[str]] = None
+) -> Dict[str, Any]:
+    """Lint every persona contract without stopping at the first failure."""
+
+    directory = Path(directory)
+    known = set(known_check_ids or [])
+    errors: List[Dict[str, Any]] = []
+    warnings: List[Dict[str, Any]] = []
+    personas: List[Persona] = []
+    persona_files: Dict[str, str] = {}
+    files_scanned = 0
+
+    if not directory.is_dir():
+        errors.append(
+            {
+                "code": "directory_missing",
+                "message": "Personas directory not found: {}".format(directory),
+            }
+        )
+    else:
+        files = sorted(
+            path
+            for path in directory.glob("*.md")
+            if not path.name.lower().startswith("readme")
+        )
+        if not files:
+            errors.append(
+                {
+                    "code": "no_persona_files",
+                    "message": "No persona files found in {}".format(directory),
+                }
+            )
+        for path in files:
+            file_name = _relative_file(path, directory)
+            files_scanned += 1
+            try:
+                persona = load_persona(path)
+            except PersonaError as exc:
+                errors.append(
+                    {
+                        "code": _lint_error_code(str(exc)),
+                        "file": file_name,
+                        "message": str(exc),
+                    }
+                )
+                continue
+            if persona.id in persona_files:
+                errors.append(
+                    {
+                        "code": "duplicate_persona_id",
+                        "file": file_name,
+                        "persona": persona.id,
+                        "message": "Duplicate persona id '{}' (also declared in {}).".format(
+                            persona.id, persona_files[persona.id]
+                        ),
+                    }
+                )
+                continue
+            persona_files[persona.id] = file_name
+            personas.append(persona)
+            for issue in _schema_issues(persona):
+                issue["file"] = file_name
+                errors.append(issue)
+
+        ownership = check_ownership(personas)
+        persona_map = {persona.id: persona for persona in personas}
+        for check_id, owners in sorted(ownership.items()):
+            if len(owners) > 1:
+                errors.append(
+                    {
+                        "code": "duplicate_ownership",
+                        "check_id": check_id,
+                        "owners": owners,
+                        "message": ownership_error_message(check_id, owners),
+                    }
+                )
+                continue
+            if check_id in known:
+                continue
+            persona = persona_map.get(owners[0]) if owners else None
+            if persona is not None and _is_scaffold_placeholder(persona, check_id):
+                warnings.append(
+                    {
+                        "code": "plugin_check_placeholder",
+                        "file": persona_files.get(persona.id, ""),
+                        "persona": persona.id,
+                        "check_id": check_id,
+                        "message": (
+                            "Scaffold check '{}' has no installed plugin yet; install a "
+                            "signed plugin or replace the check id before running.".format(
+                                check_id
+                            )
+                        ),
+                    }
+                )
+            else:
+                errors.append(
+                    {
+                        "code": "unknown_check",
+                        "check_id": check_id,
+                        "owners": owners,
+                        "message": (
+                            "Check '{}' is not in the check registry; it must be a "
+                            "built-in check or an installed plugin check.".format(check_id)
+                        ),
+                    }
+                )
+
+    loaded = [
+        {
+            "id": persona.id,
+            "file": persona_files.get(persona.id, ""),
+            "domains": list(persona.domains),
+            "checks": list(persona.checks),
+        }
+        for persona in personas
+    ]
+    return {
+        "schema_version": "quality-harness.personas.lint/v1",
+        "directory": str(directory),
+        "status": "invalid" if errors else "valid",
+        "known_check_count": len(known),
+        "personas": loaded,
+        "errors": errors,
+        "warnings": warnings,
+        "summary": {
+            "files": files_scanned,
+            "valid_personas": len(personas),
+            "errors": len(errors),
+            "warnings": len(warnings),
+        },
+    }
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix="{}.".format(path.name), suffix=".tmp", dir=str(path.parent)
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _validated_scaffold_values(
+    persona_id: str,
+    name: Optional[str],
+    domains: Optional[Iterable[str]],
+    checks: Optional[Iterable[str]],
+) -> Tuple[str, List[str], List[str]]:
+    persona_id = (persona_id or "").strip()
+    if not PERSONA_ID_PATTERN.match(persona_id):
+        raise PersonaError(
+            "Persona id must be lowercase letters, numbers, '-', or '_' and start with "
+            "a letter."
+        )
+    clean_name = (name or persona_id.replace("-", " ").replace("_", " ").title()).strip()
+    if not clean_name or any(character in clean_name for character in "\r\n"):
+        raise PersonaError("Persona name must be non-empty single-line text.")
+    domain_values = [str(item).strip() for item in (domains or [persona_id]) if str(item).strip()]
+    if not domain_values or any(not DOMAIN_ID_PATTERN.match(item) for item in domain_values):
+        raise PersonaError(
+            "Persona domains must be lowercase words using letters, numbers, '-', or '_'."
+        )
+    check_values = [
+        str(item).strip() for item in (checks or ["plugin.{}.placeholder".format(persona_id)]) if str(item).strip()
+    ]
+    if not check_values or any(not CHECK_ID_PATTERN.match(item) for item in check_values):
+        raise PersonaError(
+            "Persona checks must be non-empty ids using lowercase letters, numbers, "
+            "'.', '-', or '_'."
+        )
+    if len(set(check_values)) != len(check_values):
+        raise PersonaError("Persona checks must not contain duplicate ids.")
+    return clean_name, domain_values, check_values
+
+
+def _scaffold_template(
+    persona_id: str,
+    name: str,
+    domains: List[str],
+    checks: List[str],
+) -> str:
+    output_schema = {
+        "type": "object",
+        "title": "{}Finding".format(name.replace(" ", "")),
+        "required": list(CORE_FINDING_FIELDS),
+        "properties": {
+            "title": {"type": "string"},
+            "severity": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low", "info"],
+            },
+            "domain": {"type": "string", "enum": domains},
+            "strength": {
+                "type": "string",
+                "enum": ["observed", "source_proven", "suspected"],
+            },
+            "consequence": {"type": "string"},
+            "location": {"type": "string"},
+            "reproduction": {"type": "string"},
+            "evidence": {"type": "array", "items": {"type": "string"}},
+            "remediation": {"type": "string"},
+            "verification": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+    }
+    blocker_schema = {
+        "type": "object",
+        "title": "{}Blocker".format(name.replace(" ", "")),
+        "required": list(CORE_BLOCKER_FIELDS),
+        "properties": {
+            "persona": {"type": "string"},
+            "check_id": {"type": "string"},
+            "attempted_action": {"type": "string"},
+            "boundary": {"type": "string"},
+            "unblock_evidence": {"type": "array", "items": {"type": "string"}},
+            "covered_elsewhere": {"type": "boolean"},
+            "covered_by": {"type": "array", "items": {"type": "string"}},
+        },
+    }
+    frontmatter = [
+        "---",
+        "id: {}".format(persona_id),
+        "name: {}".format(name),
+        "version: 1.0",
+        "domains:",
+    ]
+    frontmatter.extend("  - {}".format(item) for item in domains)
+    frontmatter.extend(["tools:", "  - source_inventory", "checks:"])
+    frontmatter.extend("  - {}".format(item) for item in checks)
+    frontmatter.append("---")
+    return "\n".join(frontmatter) + "\n\n" + (
+        "## Role\n\n"
+        "State the release-risk judgment this specialist owns. Replace this text with\n"
+        "the concrete decision the persona makes.\n\n"
+        "## Available tools\n\n"
+        "| Tool | Use | Boundary |\n"
+        "| --- | --- | --- |\n"
+        "| `source_inventory` | Read the inspected source inventory. | Read-only. |\n\n"
+        "Tools are capabilities, not suggestions. Remove or replace this table before\n"
+        "the persona participates in a run.\n\n"
+        "## Output schema\n\n"
+        "Every finding must validate against this contract.\n\n"
+        "```json\n{}\n```\n\n".format(json.dumps(output_schema, indent=2))
+        + "## Blocker schema\n\n"
+        "Every refusal must validate against this contract.\n\n"
+        "```json\n{}\n```\n\n".format(json.dumps(blocker_schema, indent=2))
+        + "## Refusal handling\n\n"
+        "Refuse and return a structured blocker when the evidence needed for a\n"
+        "conclusion is outside the declared tools or scope. State what was attempted,\n"
+        "the boundary that stopped it, the evidence that would unblock it, and whether\n"
+        "another check covers the gap. Never convert a refusal into a pass.\n"
+    )
+
+
+def scaffold_persona(
+    persona_id: str,
+    directory: Path,
+    name: Optional[str] = None,
+    domains: Optional[Iterable[str]] = None,
+    checks: Optional[Iterable[str]] = None,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Write a valid starter persona contract atomically."""
+
+    directory = Path(directory)
+    clean_name, domain_values, check_values = _validated_scaffold_values(
+        persona_id, name, domains, checks
+    )
+    path = directory / "{}.md".format(persona_id)
+    next_steps = [
+        "Edit the role and tool boundaries for the specialist.",
+        "Replace the scaffold check id with an installed plugin check or an unowned built-in check.",
+        "Run 'python -m harness personas lint --personas-dir {}'.".format(directory),
+    ]
+    if path.exists() and not force:
+        return {
+            "schema_version": "quality-harness.personas.scaffold/v1",
+            "status": "refused",
+            "persona_id": persona_id,
+            "path": str(path),
+            "reason": "Persona file already exists; pass --force to overwrite it.",
+            "force": False,
+            "checks": check_values,
+            "next_steps": ["Re-run with --force to overwrite the existing contract."],
+        }
+    if path.is_dir():
+        raise PersonaError("Persona path is a directory: {}".format(path))
+    existed = path.exists()
+    template = _scaffold_template(persona_id, clean_name, domain_values, check_values)
+    _atomic_write_text(path, template)
+    return {
+        "schema_version": "quality-harness.personas.scaffold/v1",
+        "status": "overwritten" if existed else "created",
+        "persona_id": persona_id,
+        "path": str(path),
+        "force": force,
+        "domains": domain_values,
+        "checks": check_values,
+        "next_steps": next_steps,
+    }

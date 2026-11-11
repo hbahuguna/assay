@@ -21,10 +21,17 @@ and when it must refuse.
 
 Every built-in check ID in frontmatter must exist in `harness/checks.py`; a
 plugin check ID is resolved through the signed `CheckRegistry` instead. Validate
-the whole directory with:
+the whole directory or scaffold a new specialist with:
 
 ```bash
+# List loaded contracts and their full schemas.
 python -m harness personas --personas-dir personas
+
+# Lint contracts for missing sections, unknown check IDs, duplicate ownership, and schema issues.
+python -m harness personas lint --personas-dir personas
+
+# Scaffold a starter specialist contract that passes lint unchanged.
+python -m harness personas scaffold reliability --personas-dir personas
 ```
 
 ## Rules
