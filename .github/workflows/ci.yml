@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Python 3.11 (browser=${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [true, false]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: python -m pip install -e .[dev]
+
+      - name: Install Playwright and Chromium
+        if: matrix.browser
+        run: |
+          python -m pip install -e .[browser]
+          python -m playwright install --with-deps chromium
+
+      - name: Run unit and contract tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Run browser smoke test
+        if: matrix.browser
+        run: python -m unittest tests.test_browser_smoke -v
+
+      - name: Serve the local demo fixture
+        if: matrix.browser
+        run: |
+          python -m http.server 8080 --directory examples/demo-web >/tmp/demo-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/ >/dev/null
+          python -m harness run \
+            --target http://127.0.0.1:8080/ \
+            --source examples/demo-web \
+            --personas-dir personas \
+            --root .harness-smoke
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path(".harness-smoke/.harness/report.json").read_text(encoding="utf-8"))
+          browser_load = next(
+              check for check in report["checks"] if check["id"] == "browser.load"
+          )
+          if browser_load["status"] == "blocked":
+              raise SystemExit("browser.load was blocked: {}".format(browser_load.get("actual")))
+          print("browser.load status: {}".format(browser_load["status"]))
+          PY
+
+      - name: Upload browser evidence
+        if: matrix.browser && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-evidence-${{ matrix.browser }}
+          path: .harness-smoke/.harness/evidence
+          if-no-files-found: error

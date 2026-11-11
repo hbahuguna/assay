@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-010 - Add Playwright-enabled CI and a browser smoke fixture
-
-- **Epic:** E3 Inspect and Operate Evidence
-- **Priority:** P0
-- **Points:** 3
-- **Depends on:** None
-- **Status:** Ready
-- **Description:** Add a CI job that installs Playwright and Chromium, serves
-  `examples/demo-web`, runs the live checks, and asserts that browser checks
-  execute rather than block.
-- **Acceptance Criteria:**
-  - CI fails if `browser.load` is `blocked` for the smoke fixture.
-  - The job captures the screenshot and console/network logs as artifacts.
-  - A missing-browser matrix leg still verifies the blocked degradation path.
-  - No test reaches the public internet.
-
 ### QH-011 - Capture HAR, trace, and video with redaction
 
 - **Epic:** E3 Inspect and Operate Evidence
@@ -604,9 +588,9 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-009` are complete, so `QH-010` is now
-the lowest-numbered unblocked task (and an unblocked P0). `QH-019` remains the
-first commercial-critical-path task.
+No task is claimed. `QH-001` through `QH-010` are complete, so `QH-011` is now
+the lowest-numbered unblocked task. `QH-019` remains the first
+commercial-critical-path task.
 
 ## Blockers
 
@@ -861,6 +845,34 @@ first commercial-critical-path task.
   (exit 2), that `--force` overwrites successfully, and that custom domains and checks
   are accepted. Full suite: 95 passing tests with Python 3.11. `README.md` and
   `personas/README.md` document the commands.
+
+### QH-010 - Add Playwright-enabled CI and a browser smoke fixture
+
+- **Epic:** E3 Inspect and Operate Evidence
+- **Priority:** P0
+- **Points:** 3
+- **Depends on:** None
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added a GitHub Actions workflow that runs the full test suite
+  on Python 3.11 with a two-leg matrix: one leg installs Playwright and Chromium
+  and runs live browser checks against the local `examples/demo-web` fixture, and
+  the other leg verifies the blocked degradation path without Playwright. The
+  workflow starts a localhost server, runs the harness against it, asserts that
+  `browser.load` is not `blocked`, and uploads screenshot, console, and network
+  evidence as artifacts. `tests/test_browser_smoke.py` exercises the same path
+  end to end when Playwright is available and skips otherwise.
+- **Acceptance Criteria:**
+  - CI fails if `browser.load` is `blocked` for the smoke fixture.
+  - The job captures the screenshot and console/network logs as artifacts.
+  - A missing-browser matrix leg still verifies the blocked degradation path.
+  - No test reaches the public internet.
+- **Evidence:** `.github/workflows/ci.yml` defines the matrix and artifact upload.
+  `tests/test_browser_smoke.py` passes locally with Playwright and Chromium
+  installed, asserting `browser.load` is not `blocked` and that screenshot,
+  console-log, and network-log evidence artifacts exist. The missing-browser path
+  is covered by `tests/test_blockers.py`. Full suite: 96 passing tests with Python
+  3.11.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

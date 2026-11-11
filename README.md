@@ -339,6 +339,14 @@ BOARD.md            Epics, ready tasks, blockers, decisions
 AGENTS.md           Contract for coding agents working this board
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the unit and contract tests on Python 3.11.
+One matrix leg installs Playwright and Chromium, serves `examples/demo-web` on
+localhost, runs the browser Operate checks against it, and uploads screenshot,
+console, and network evidence as artifacts. The other leg verifies the blocked
+degradation path without Playwright. No test reaches the public internet.
+
 ## Tests
 
 ```bash
