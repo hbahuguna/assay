@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-011 - Capture HAR, trace, and video with redaction
-
-- **Epic:** E3 Inspect and Operate Evidence
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-010
-- **Status:** Ready
-- **Description:** Add optional HAR, Playwright trace, and video capture to the
-  browser layer, with cookie and authorization redaction before artifacts enter
-  the evidence manifest.
-- **Acceptance Criteria:**
-  - HAR entries redact `authorization`, `cookie`, and `set-cookie` values.
-  - Trace and video paths are recorded in the manifest with hashes and sizes.
-  - Capture can be disabled by config without changing check outcomes.
-  - A redaction test fails if a known token appears in any artifact.
-
 ### QH-012 - Support authenticated flows via storage-state injection
 
 - **Epic:** E3 Inspect and Operate Evidence
@@ -588,7 +572,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-010` are complete, so `QH-011` is now
+No task is claimed. `QH-001` through `QH-011` are complete, so `QH-012` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task.
 
@@ -873,6 +857,34 @@ commercial-critical-path task.
   console-log, and network-log evidence artifacts exist. The missing-browser path
   is covered by `tests/test_blockers.py`. Full suite: 96 passing tests with Python
   3.11.
+
+### QH-011 - Capture HAR, trace, and video with redaction
+
+- **Epic:** E3 Inspect and Operate Evidence
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-010
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added optional HAR, Playwright trace, and video capture to
+  the browser Operate layer, controlled by `--browser-har`, `--browser-trace`,
+  and `--browser-video`. HAR entries, console locations, DOM snapshots, and
+  trace archive text are redacted for authorization, cookie, set-cookie, and
+  token-like values before persistence. Artifacts are recorded in the evidence
+  manifest with hashes and sizes.
+- **Acceptance Criteria:**
+  - HAR entries redact `authorization`, `cookie`, and `set-cookie` values.
+  - Trace and video paths are recorded in the manifest with hashes and sizes.
+  - Capture can be disabled by config without changing check outcomes.
+  - A redaction test fails if a known token appears in any artifact.
+- **Evidence:** `tests/test_browser_capture.py` runs the browser smoke fixture
+  with all three capture flags and asserts that `har`, `trace`, and `video`
+  artifacts are present in the manifest with positive byte counts and SHA-256
+  hashes. It injects `token=not-a-real-token-value` into a requested asset URL
+  and asserts that the raw token does not appear in any persisted artifact while
+  `[REDACTED]` does. It also verifies that disabling all flags leaves the
+  evidence set unchanged. Full suite: 98 passing tests with Python 3.11.
+  `README.md` documents the capture flags.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

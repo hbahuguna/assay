@@ -211,6 +211,20 @@ If Playwright or Chromium cannot start, browser checks are reported as
 `blocked` with an actionable reason. They are never converted into passes, and
 the run continues with source evidence.
 
+Optional browser capture is off by default and can be enabled per run:
+
+```bash
+python -m harness run --target http://127.0.0.1:8765/ \
+  --source examples/sample-repo \
+  --browser-har --browser-trace --browser-video \
+  --root .harness-live
+```
+
+HAR, trace, and video artifacts are recorded in the evidence manifest with
+hashes and sizes. HAR entries and trace text redact `authorization`, `cookie`,
+`set-cookie`, and token-like values before persistence. Disable all three flags
+to keep the run's evidence set unchanged.
+
 ## What the report contains
 
 - `decision`: `ship`, `review`, or `hold`, with a rationale.

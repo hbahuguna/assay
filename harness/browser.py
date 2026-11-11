@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from pathlib import Path
 
 from .errors import BrowserUnavailable
 from .evidence import EvidenceStore
@@ -178,6 +179,9 @@ class BrowserOptions:
     timeout_ms: int = 30000
     viewport_width: int = 1440
     viewport_height: int = 900
+    capture_har: bool = False
+    capture_trace: bool = False
+    capture_video: bool = False
 
 
 @dataclass
@@ -205,6 +209,10 @@ class BrowserController:
         self.navigation: Optional[NavigationResult] = None
         self.evidence_refs: Dict[str, str] = {}
         self.capture_notes: List[str] = []
+        self.har_path: Optional[Path] = None
+        self.trace_path: Optional[Path] = None
+        self.video_dir: Optional[Path] = None
+        self.video_path: Optional[Path] = None
 
     async def start(self) -> None:
         try:
@@ -217,15 +225,33 @@ class BrowserController:
         try:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=self.options.headless)
-            self.context = await self.browser.new_context(
-                viewport={"width": self.options.viewport_width, "height": self.options.viewport_height},
-                ignore_https_errors=False,
-            )
+            context_options: Dict[str, Any] = {
+                "viewport": {"width": self.options.viewport_width, "height": self.options.viewport_height},
+                "ignore_https_errors": False,
+            }
+            if self.options.capture_har:
+                self.har_path = self.evidence.run_dir / ".capture.har"
+                context_options["record_har_path"] = str(self.har_path)
+                context_options["record_har_mode"] = "full"
+            if self.options.capture_video:
+                self.video_dir = self.evidence.run_dir / ".capture-video"
+                self.video_dir.mkdir(parents=True, exist_ok=True)
+                context_options["record_video_dir"] = str(self.video_dir)
+                context_options["record_video_size"] = {
+                    "width": self.options.viewport_width,
+                    "height": self.options.viewport_height,
+                }
+            self.context = await self.browser.new_context(**context_options)
             self.page = await self.context.new_page()
             self.page.on("console", self._on_console)
             self.page.on("pageerror", self._on_page_error)
             self.page.on("response", self._on_response)
             self.page.on("requestfailed", self._on_request_failed)
+            if self.options.capture_trace:
+                self.trace_path = self.evidence.run_dir / ".capture-trace.zip"
+                await self.context.tracing.start(
+                    screenshots=True, snapshots=True, sources=True
+                )
         except Exception as exc:
             await self.close()
             raise BrowserUnavailable(
@@ -238,7 +264,7 @@ class BrowserController:
             return
         try:
             self.console_messages.append(
-                {"type": message.type, "text": redact_text(message.text), "location": str(message.location)}
+                {"type": message.type, "text": redact_text(message.text), "location": redact_text(str(message.location))}
             )
         except Exception:
             pass
@@ -310,6 +336,197 @@ class BrowserController:
         await self._capture(url)
         return result
 
+    async def finalize_capture(self) -> None:
+        """Persist optional HAR, trace, and video artifacts before context close."""
+
+        if self.context is None:
+            return
+        video_path = None
+        if not self.options.capture_video:
+            self.capture_notes.append("Video capture disabled by configuration.")
+        elif self.page is None:
+            self.capture_notes.append("Video capture skipped because the page is unavailable.")
+        elif self.page.video is None:
+            self.capture_notes.append("Video capture skipped because Playwright did not create a video object.")
+        else:
+            try:
+                video_path = Path(await self.page.video.path())
+            except Exception as exc:
+                self.capture_notes.append("Video path capture failed: {}".format(redact_text(str(exc))))
+        if self.options.capture_trace and self.trace_path is not None:
+            try:
+                await self.context.tracing.stop(path=str(self.trace_path))
+            except Exception as exc:
+                self.capture_notes.append("Trace capture failed: {}".format(redact_text(str(exc))))
+                self.trace_path = None
+        try:
+            await self.context.close()
+        except Exception as exc:
+            self.capture_notes.append("Browser context close failed: {}".format(redact_text(str(exc))))
+        self.context = None
+        if self.har_path is not None and self.har_path.exists():
+            try:
+                raw = json.loads(self.har_path.read_text(encoding="utf-8"))
+                redacted = self._redact_har(raw)
+                self.evidence_refs["har"] = self.evidence.save_json(
+                    "har-log",
+                    redacted,
+                    kind="har",
+                    description="Redacted HTTP Archive for the browser run.",
+                )
+            except Exception as exc:
+                self.capture_notes.append("HAR capture failed: {}".format(redact_text(str(exc))))
+            finally:
+                try:
+                    self.har_path.unlink()
+                except OSError:
+                    pass
+        if self.trace_path is not None and self.trace_path.exists():
+            try:
+                data = self._redact_trace_bytes(self.trace_path.read_bytes())
+                self.evidence_refs["trace"] = self.evidence.save_bytes(
+                    "playwright-trace",
+                    data,
+                    kind="trace",
+                    description="Playwright trace for the browser run.",
+                    suffix=".zip",
+                )
+            except Exception as exc:
+                self.capture_notes.append("Trace artifact save failed: {}".format(redact_text(str(exc))))
+            finally:
+                try:
+                    self.trace_path.unlink()
+                except OSError:
+                    pass
+        if video_path is not None and video_path.exists():
+            try:
+                data = video_path.read_bytes()
+                self.evidence_refs["video"] = self.evidence.save_bytes(
+                    "browser-video",
+                    data,
+                    kind="video",
+                    description="Browser video for the run.",
+                    suffix=video_path.suffix or ".webm",
+                )
+            except Exception as exc:
+                self.capture_notes.append("Video capture failed: {}".format(redact_text(str(exc))))
+            finally:
+                try:
+                    video_path.unlink()
+                except OSError:
+                    pass
+                if self.video_dir is not None:
+                    try:
+                        for leftover in self.video_dir.iterdir():
+                            leftover.unlink()
+                        self.video_dir.rmdir()
+                    except OSError:
+                        pass
+        self.page = None
+
+    @staticmethod
+    def _redact_trace_bytes(data: bytes) -> bytes:
+        """Redact sensitive values from a Playwright trace archive."""
+
+        import io
+        import zipfile
+
+        try:
+            source = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile:
+            return data
+
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as destination:
+            for info in source.infolist():
+                raw = source.read(info)
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeDecodeError:
+                    destination.writestr(info, raw)
+                    continue
+                for pattern in TOKEN_PATTERNS:
+                    if pattern.groups:
+                        text = pattern.sub(
+                            lambda match: match.group(1) + "[REDACTED]", text
+                        )
+                    else:
+                        text = pattern.sub("[REDACTED]", text)
+                text = re.sub(
+                    r'(?i)("?(?:authorization|cookie|set-cookie|x-api-key)"?\s*[:=]\s*"?)'
+                    r'[^"\n]{6,}',
+                    r"\1[REDACTED]",
+                    text,
+                )
+                destination.writestr(info, text.encode("utf-8"))
+        return output.getvalue()
+        sensitive_headers = {
+            "authorization",
+            "cookie",
+            "set-cookie",
+            "proxy-authorization",
+            "x-api-key",
+        }
+        sensitive_query = {
+            "token",
+            "access_token",
+            "id_token",
+            "api_key",
+            "apikey",
+            "secret",
+            "password",
+            "passwd",
+            "session",
+            "sessionid",
+            "jwt",
+            "auth",
+            "code",
+        }
+
+        def redact_headers(headers: Any) -> None:
+            if not isinstance(headers, list):
+                return
+            for header in headers:
+                if not isinstance(header, dict):
+                    continue
+                name = str(header.get("name", "")).lower()
+                if name in sensitive_headers:
+                    header["value"] = "[REDACTED]"
+
+        def redact_cookies(cookies: Any) -> None:
+            if not isinstance(cookies, list):
+                return
+            for cookie in cookies:
+                if isinstance(cookie, dict) and "value" in cookie:
+                    cookie["value"] = "[REDACTED]"
+
+        def redact_query(items: Any) -> None:
+            if not isinstance(items, list):
+                return
+            for item in items:
+                if isinstance(item, dict) and str(item.get("name", "")).lower() in sensitive_query:
+                    item["value"] = "[REDACTED]"
+
+        def visit(node: Any) -> Any:
+            if isinstance(node, dict):
+                for key, value in list(node.items()):
+                    if key == "url" and isinstance(value, str):
+                        node[key] = sanitize_url(value)
+                    elif key in ("headers",):
+                        redact_headers(value)
+                    elif key in ("cookies",):
+                        redact_cookies(value)
+                    elif key == "queryString":
+                        redact_query(value)
+                    else:
+                        visit(value)
+            elif isinstance(node, list):
+                for item in node:
+                    visit(item)
+            return node
+
+        return visit(payload)
+
     async def _capture(self, requested_url: str) -> None:
         assert self.page is not None
         try:
@@ -328,7 +545,9 @@ class BrowserController:
             self.capture_notes.append("Screenshot capture failed: {}".format(redact_text(str(exc))))
         try:
             snapshot = await self.page.evaluate(JS_SNAPSHOT)
-            self.snapshot = snapshot if isinstance(snapshot, dict) else {}
+            self.snapshot = (
+                self._sanitize_snapshot(snapshot) if isinstance(snapshot, dict) else {}
+            )
         except Exception as exc:
             self.capture_notes.append("DOM snapshot failed: {}".format(redact_text(str(exc))))
             self.snapshot = {}
@@ -406,6 +625,119 @@ class BrowserController:
         self.playwright = None
 
 
+    @staticmethod
+    def _sanitize_snapshot(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        url_keys = {"src", "href", "action", "url", "final_url", "location", "finalUrl"}
+
+        def visit(node: Any) -> None:
+            if isinstance(node, dict):
+                for key, value in list(node.items()):
+                    if isinstance(value, str):
+                        if key in url_keys:
+                            node[key] = BrowserController._redact_text(
+                                sanitize_url(value)
+                            )
+                        else:
+                            node[key] = BrowserController._redact_text(value)
+                    else:
+                        visit(value)
+            elif isinstance(node, list):
+                for item in node:
+                    visit(item)
+
+        visit(snapshot)
+        return snapshot
+
+
+    @staticmethod
+    def _redact_text(value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        text = value
+        for pattern in TOKEN_PATTERNS:
+            if pattern.groups:
+                text = pattern.sub(lambda match: match.group(1) + "[REDACTED]", text)
+            else:
+                text = pattern.sub("[REDACTED]", text)
+        return text
+
+    @staticmethod
+    def _redact_har(payload: Any) -> Any:
+        sensitive_headers = {
+            "authorization",
+            "cookie",
+            "set-cookie",
+            "proxy-authorization",
+            "x-api-key",
+        }
+        sensitive_query = {
+            "token",
+            "access_token",
+            "id_token",
+            "api_key",
+            "apikey",
+            "secret",
+            "password",
+            "passwd",
+            "session",
+            "sessionid",
+            "jwt",
+            "auth",
+            "code",
+        }
+
+        def redact_headers(headers: Any) -> None:
+            if not isinstance(headers, list):
+                return
+            for header in headers:
+                if not isinstance(header, dict):
+                    continue
+                name = str(header.get("name", "")).lower()
+                if name in sensitive_headers:
+                    header["value"] = "[REDACTED]"
+
+        def redact_cookies(cookies: Any) -> None:
+            if not isinstance(cookies, list):
+                return
+            for cookie in cookies:
+                if isinstance(cookie, dict) and "value" in cookie:
+                    cookie["value"] = "[REDACTED]"
+
+        def redact_query(items: Any) -> None:
+            if not isinstance(items, list):
+                return
+            for item in items:
+                if isinstance(item, dict) and str(item.get("name", "")).lower() in sensitive_query:
+                    item["value"] = "[REDACTED]"
+
+        def visit(node: Any) -> Any:
+            if isinstance(node, dict):
+                for key, value in list(node.items()):
+                    if isinstance(value, str):
+                        if key == "url":
+                            node[key] = BrowserController._redact_text(
+                                sanitize_url(value)
+                            )
+                        else:
+                            node[key] = BrowserController._redact_text(value)
+                    elif key == "headers":
+                        redact_headers(value)
+                        visit(value)
+                    elif key == "cookies":
+                        redact_cookies(value)
+                        visit(value)
+                    elif key == "queryString":
+                        redact_query(value)
+                        visit(value)
+                    else:
+                        visit(value)
+            elif isinstance(node, list):
+                for item in node:
+                    visit(item)
+            return node
+
+        return visit(payload)
+
 class BrowserCheckRunner:
     def __init__(
         self,
@@ -473,6 +805,12 @@ class BrowserCheckRunner:
                         )
                     break
         finally:
+            try:
+                await controller.finalize_capture()
+            except Exception as exc:
+                controller.capture_notes.append(
+                    "Capture finalization failed: {}".format(redact_text(str(exc)))
+                )
             await controller.close()
 
     def _common_evidence(self, controller: BrowserController) -> List[str]:

@@ -138,6 +138,9 @@ class RunOptions:
     timeout_ms: int = 30000
     viewport: str = "1440x900"
     kill_on: str = "critical"
+    browser_har: bool = False
+    browser_trace: bool = False
+    browser_video: bool = False
     require_personas: int = 3
     verbose: bool = False
     seed: Optional[int] = None
@@ -726,6 +729,9 @@ class Orchestrator:
                             timeout_ms=self.options.timeout_ms,
                             viewport_width=int(viewport[0]),
                             viewport_height=int(viewport[1]),
+                            capture_har=self.options.browser_har,
+                            capture_trace=self.options.browser_trace,
+                            capture_video=self.options.browser_video,
                         ),
                         self._browser_outcome_callback,
                     )

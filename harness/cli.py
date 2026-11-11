@@ -115,6 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Keep at most this many historical runs after the run completes.",
     )
+    run.add_argument("--browser-har", action="store_true", help="Capture a redacted HTTP Archive for browser runs.")
+    run.add_argument("--browser-trace", action="store_true", help="Capture a Playwright trace for browser runs.")
+    run.add_argument("--browser-video", action="store_true", help="Capture browser video for browser runs.")
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
     run.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
@@ -210,6 +213,9 @@ def _run(args: argparse.Namespace) -> int:
         timeout_ms=int(args.timeout * 1000),
         viewport=args.viewport,
         kill_on=args.kill_on,
+        browser_har=args.browser_har,
+        browser_trace=args.browser_trace,
+        browser_video=args.browser_video,
         require_personas=3,
         seed=args.seed,
         clock_mode=args.clock_mode,
