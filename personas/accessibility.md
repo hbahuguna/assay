@@ -81,6 +81,35 @@ disability or claim user testing that did not happen.
 Use `high` only when the barrier blocks a core task for an assistive-technology
 user. Decorative or cosmetic issues belong at `low` or `info`.
 
+## Blocker schema
+
+A refusal is a structured blocker, not a finding. Every blocked check must
+validate against this contract before it can appear in the report.
+
+```json
+{
+  "type": "object",
+  "title": "AccessibilityBlocker",
+  "required": [
+    "persona",
+    "check_id",
+    "attempted_action",
+    "boundary",
+    "unblock_evidence",
+    "covered_elsewhere"
+  ],
+  "properties": {
+    "persona": {"type": "string"},
+    "check_id": {"type": "string"},
+    "attempted_action": {"type": "string"},
+    "boundary": {"type": "string"},
+    "unblock_evidence": {"type": "array", "items": {"type": "string"}},
+    "covered_elsewhere": {"type": "boolean"},
+    "covered_by": {"type": "array", "items": {"type": "string"}}
+  }
+}
+```
+
 ## Refusal handling
 
 Refuse and return a structured blocker when:

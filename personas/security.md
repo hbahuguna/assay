@@ -90,6 +90,35 @@ Use `critical` only when a live credential or remote code execution path is
 supported by evidence. A pattern match that cannot be reached is at most
 `medium` and must carry the `needs-trace` tag.
 
+## Blocker schema
+
+A refusal is a structured blocker, not a finding. Every blocked check must
+validate against this contract before it can appear in the report.
+
+```json
+{
+  "type": "object",
+  "title": "SecurityBlocker",
+  "required": [
+    "persona",
+    "check_id",
+    "attempted_action",
+    "boundary",
+    "unblock_evidence",
+    "covered_elsewhere"
+  ],
+  "properties": {
+    "persona": {"type": "string"},
+    "check_id": {"type": "string"},
+    "attempted_action": {"type": "string"},
+    "boundary": {"type": "string"},
+    "unblock_evidence": {"type": "array", "items": {"type": "string"}},
+    "covered_elsewhere": {"type": "boolean"},
+    "covered_by": {"type": "array", "items": {"type": "string"}}
+  }
+}
+```
+
 ## Refusal handling
 
 Refuse and return a structured blocker when:

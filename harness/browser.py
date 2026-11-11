@@ -17,7 +17,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from .errors import BrowserUnavailable
 from .evidence import EvidenceStore
 from .models import Check, CheckStatus, Severity, Strength
-from .outcomes import CheckOutcome
+from .outcomes import BlockerDraft, CheckOutcome
 
 MAX_EVENTS = 500
 
@@ -428,6 +428,13 @@ class BrowserCheckRunner:
                         status=CheckStatus.BLOCKED.value,
                         actual="Browser checks were not executed: {}".format(exc),
                         metadata={"limitation": str(exc)},
+                        blocker=BlockerDraft(
+                            attempted_action=check.title,
+                            boundary="Browser execution is unavailable: {}".format(exc),
+                            unblock_evidence=[
+                                "Install Playwright and Chromium, serve the target, and rerun the check."
+                            ],
+                        ),
                     ),
                 )
 
@@ -443,6 +450,13 @@ class BrowserCheckRunner:
                         actual="Navigation did not complete: {}".format(navigation.error),
                         evidence=[controller.evidence_refs.get("navigation", "")],
                         metadata={"limitation": navigation.error},
+                        blocker=BlockerDraft(
+                            attempted_action=check.title,
+                            boundary="Navigation did not complete: {}".format(navigation.error),
+                            unblock_evidence=[
+                                "Restore the target URL or navigation path, then rerun the check."
+                            ],
+                        ),
                     )
                 else:
                     outcome = self._evaluate(check, controller, navigation)

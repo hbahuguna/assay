@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .models import CheckStatus, Severity, Strength
 
@@ -24,12 +24,40 @@ class FindingDraft:
 
 
 @dataclass
+class BlockerDraft:
+    attempted_action: str
+    boundary: str
+    unblock_evidence: List[str] = field(default_factory=list)
+    covered_elsewhere: bool = False
+    covered_by: List[str] = field(default_factory=list)
+
+
+@dataclass
 class CheckOutcome:
     status: str = CheckStatus.PASSED.value
     actual: str = ""
     evidence: List[str] = field(default_factory=list)
     findings: List[FindingDraft] = field(default_factory=list)
+    blocker: Optional[BlockerDraft] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def add_blocker(
+        self,
+        attempted_action: str,
+        boundary: str,
+        unblock_evidence: List[str] = None,
+        covered_elsewhere: bool = False,
+        covered_by: List[str] = None,
+    ) -> None:
+        self.blocker = BlockerDraft(
+            attempted_action=attempted_action,
+            boundary=boundary,
+            unblock_evidence=list(unblock_evidence or []),
+            covered_elsewhere=covered_elsewhere,
+            covered_by=list(covered_by or []),
+        )
+        self.findings = []
+        self.status = CheckStatus.BLOCKED.value
 
     def add_finding(
         self,

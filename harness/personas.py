@@ -1,8 +1,8 @@
 """Load and validate specialist persona contracts.
 
-A persona is a Markdown file with simple YAML frontmatter and four required
+A persona is a Markdown file with simple YAML frontmatter and five required
 sections.  The contract is intentionally readable by both humans and agents:
-role, tools, output schema, and refusal handling.
+role, tools, output schema, blocker schema, and refusal handling.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ REQUIRED_SECTIONS = [
     "role",
     "available tools",
     "output schema",
+    "blocker schema",
     "refusal handling",
 ]
 
@@ -38,6 +39,7 @@ class Persona:
     role: str
     tools_section: str
     output_schema: Dict[str, Any]
+    blocker_schema: Dict[str, Any]
     refusal: str
     body: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -52,6 +54,7 @@ class Persona:
             "checks": list(self.checks),
             "path": str(self.path),
             "schema_title": self.output_schema.get("title", ""),
+            "blocker_schema_title": self.blocker_schema.get("title", ""),
         }
 
 
@@ -125,23 +128,25 @@ def _split_sections(body: str) -> Dict[str, str]:
     return sections
 
 
-def _extract_json_schema(section: str, path: Path) -> Dict[str, Any]:
+def _extract_json_schema(
+    section: str, path: Path, label: str = "output schema"
+) -> Dict[str, Any]:
     match = re.search(r"```json\s*\n(.*?)```", section, re.DOTALL | re.IGNORECASE)
     if not match:
-        raise PersonaError("{}: output schema section needs a ```json fenced block".format(path))
+        raise PersonaError("{}: {} section needs a ```json fenced block".format(path, label))
     try:
         schema = json.loads(match.group(1))
     except ValueError as exc:
-        raise PersonaError("{}: output schema JSON is invalid: {}".format(path, exc))
+        raise PersonaError("{}: {} JSON is invalid: {}".format(path, label, exc))
     if not isinstance(schema, dict):
-        raise PersonaError("{}: output schema must be a JSON object".format(path))
+        raise PersonaError("{}: {} must be a JSON object".format(path, label))
     if schema.get("type") != "object":
-        raise PersonaError("{}: output schema type must be 'object'".format(path))
+        raise PersonaError("{}: {} type must be 'object'".format(path, label))
     if not isinstance(schema.get("required"), list) or not schema["required"]:
-        raise PersonaError("{}: output schema needs a non-empty required array".format(path))
+        raise PersonaError("{}: {} needs a non-empty required array".format(path, label))
     properties = schema.get("properties")
     if not isinstance(properties, dict) or not properties:
-        raise PersonaError("{}: output schema needs a properties object".format(path))
+        raise PersonaError("{}: {} needs a properties object".format(path, label))
     return schema
 
 
@@ -169,7 +174,10 @@ def load_persona(path: Path) -> Persona:
         raise PersonaError(
             "{}: missing required section(s): {}".format(path, ", ".join("## " + m.title() for m in missing))
         )
-    schema = _extract_json_schema(sections["output schema"], path)
+    schema = _extract_json_schema(sections["output schema"], path, "output schema")
+    blocker_schema = _extract_json_schema(
+        sections["blocker schema"], path, "blocker schema"
+    )
     persona = Persona(
         id=str(meta["id"]),
         name=str(meta["name"]),
@@ -181,6 +189,7 @@ def load_persona(path: Path) -> Persona:
         role=sections["role"],
         tools_section=sections["available tools"],
         output_schema=schema,
+        blocker_schema=blocker_schema,
         refusal=sections["refusal handling"],
         body=body,
         metadata=dict(meta),
@@ -328,6 +337,12 @@ def validate_payload(payload: Any, schema: Dict[str, Any], path: str = "$") -> L
         for index, item in enumerate(payload):
             errors.extend(validate_payload(item, schema["items"], "{}[{}]".format(path, index)))
     return errors
+
+
+def validate_blocker(payload: Any, persona: Persona) -> List[str]:
+    """Validate a blocker payload against the persona's blocker contract."""
+
+    return validate_payload(payload, persona.blocker_schema)
 
 
 def unknown_persona_check_ids(

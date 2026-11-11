@@ -239,6 +239,9 @@ def _status(args: argparse.Namespace) -> int:
                 "schema_version": REPORT_SCHEMA,
                 "status": "no_run",
                 "message": "No .harness/progress.json exists yet.",
+                "blockers": [],
+                "blockers_by_persona": {},
+                "blockers_by_check": {},
                 "root": str(store.root),
             }
         )
@@ -250,6 +253,15 @@ def _status(args: argparse.Namespace) -> int:
     findings_by_severity: Dict[str, int] = {}
     for finding in state.findings:
         findings_by_severity[finding.severity] = findings_by_severity.get(finding.severity, 0) + 1
+    blockers_by_persona: Dict[str, int] = {}
+    blockers_by_check: Dict[str, int] = {}
+    for blocker in state.blockers:
+        blockers_by_persona[blocker.persona] = (
+            blockers_by_persona.get(blocker.persona, 0) + 1
+        )
+        blockers_by_check[blocker.check_id] = (
+            blockers_by_check.get(blocker.check_id, 0) + 1
+        )
     payload = {
         "schema_version": REPORT_SCHEMA,
         "status": state.status,
@@ -262,6 +274,9 @@ def _status(args: argparse.Namespace) -> int:
         "confidence": state.confidence.to_dict(),
         "checks_by_status": checks_by_status,
         "findings_by_severity": findings_by_severity,
+        "blockers": [blocker.to_dict() for blocker in state.blockers],
+        "blockers_by_persona": blockers_by_persona,
+        "blockers_by_check": blockers_by_check,
         "kill_switch": state.kill_switch.to_dict(),
         "halted_reason": state.halted_reason,
         "report_path": str(store.report_path),
@@ -339,6 +354,7 @@ def _personas(args: argparse.Namespace) -> int:
                 "checks": persona.checks,
                 "path": str(persona.path),
                 "output_schema": persona.output_schema,
+                "blocker_schema": persona.blocker_schema,
                 "refusal_handling": persona.refusal,
             }
             for persona in personas

@@ -28,7 +28,7 @@ from .checks import CHECK_CATALOG, CheckDefinition
 from .errors import PersonaError, PluginError
 from .evidence import EvidenceStore
 from .models import Check, CheckStatus, Target
-from .outcomes import CheckOutcome, FindingDraft
+from .outcomes import BlockerDraft, CheckOutcome, FindingDraft
 from .personas import Persona, check_ownership, ownership_error_message
 from .static_analysis import Inventory
 
@@ -130,6 +130,11 @@ class PluginCheckRunner:
             return CheckOutcome(
                 status=CheckStatus.ERROR.value,
                 actual="Plugin findings must be FindingDraft instances.",
+            )
+        if outcome.blocker is not None and not isinstance(outcome.blocker, BlockerDraft):
+            return CheckOutcome(
+                status=CheckStatus.ERROR.value,
+                actual="Plugin blocker must be a BlockerDraft instance.",
             )
         invalid = self._invalid_evidence(outcome.evidence)
         if invalid:

@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-008 - Add structured refusal and blocker records
-
-- **Epic:** E2 Specialist Persona Layer
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-007
-- **Status:** Ready
-- **Description:** Give refusal handling a machine-readable shape so blocked work
-  appears as `blockers[]` with the attempted action, boundary, unblock evidence,
-  and whether the gap is covered elsewhere.
-- **Acceptance Criteria:**
-  - A blocked check produces one blocker record and zero findings.
-  - Blockers are included in the report, status output, and coverage roll-up.
-  - A blocker can never be converted to `passed`.
-  - Schema validation covers the blocker contract for all three personas.
-
 ### QH-009 - Add persona lint and scaffold commands
 
 - **Epic:** E2 Specialist Persona Layer
@@ -636,7 +620,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-007` are complete, so `QH-008` is now
+No task is claimed. `QH-001` through `QH-008` are complete, so `QH-009` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task, and `QH-010` can proceed in parallel because it has
 no dependency.
@@ -832,6 +816,37 @@ no dependency.
   Python 3.11. The report contract and persona rules are documented in
   `README.md` and `personas/README.md`.
 
+### QH-008 - Add structured refusal and blocker records
+
+- **Epic:** E2 Specialist Persona Layer
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-007
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Refusals and blocked work are persisted as one structured
+  `Blocker` per blocked check. A blocker records the attempted action, the
+  boundary that stopped it, the evidence needed to unblock it, and whether
+  another check covers the gap. Blocked checks never carry findings, and a
+  blocker-bearing outcome can never become `passed`.
+- **Acceptance Criteria:**
+  - A blocked check produces one blocker record and zero findings.
+  - Blockers are included in the report, status output, and coverage roll-up.
+  - A blocker can never be converted to `passed`.
+  - Schema validation covers the blocker contract for all three personas.
+- **Evidence:** `tests/test_blockers.py` runs signed plugins that refuse with a
+  structured blocker, return a finding from a blocked check, and claim `passed`
+  while carrying a blocker. It proves each blocked check has exactly one
+  blocker, findings are discarded, the pass claim is forced back to `blocked`,
+  planning failures materialize blockers, an unavailable browser produces one
+  blocker per browser check across all three personas, and the report,
+  `status` output, and coverage counts expose the blocker. All three persona
+  contracts load a `## Blocker schema` and reject a payload missing `boundary`.
+  A synthetic token in blocker text is redacted before progress, report,
+  evidence, or `status` persistence. Full suite: 89 passing tests with Python
+  3.11. `README.md`, `personas/README.md`, and `examples/plugins/README.md`
+  document the blocker contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -873,3 +888,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D15 | 2026-11-11 | `.harness/history.json` is the run index; pruning writes the retained index before deleting evidence and always protects the latest run, latest completed run, and halted runs. | A crash during pruning must not leave history claiming deleted evidence, and operators need a stable latest run plus halted runs for incident review. | Move to per-run state snapshots if pruning must also remove non-latest progress state transactionally. |
 | D16 | 2026-11-11 | Persona frontmatter is the only source of check ownership. The catalog's `persona` field is legacy plugin metadata and never drives planning. Built-in zero/multiple ownership is a fatal configuration error; plugin ownership failures are blocked coverage gaps. | A duplicated assignment can drift silently. Deriving owners from the contracts makes disjoint ownership machine-checkable, while preserving D13 for optional plugins. | Remove the legacy field after external plugins have migrated or a plugin schema v2 is published. |
 | D17 | 2026-11-11 | Findings are validated against the owning persona schema before normalization. Invalid drafts persist only as redacted `invalid_findings` records, never in scoring, finding counts, or kill-switch evaluation. Three consecutive invalid findings degrade the persona; a valid finding resets the streak. | Normalization can otherwise turn a malformed finding into an apparently valid one. Quarantining preserves the audit trail while preventing contract failures from inflating or deflating release confidence. | Add per-check contract-failure budgets or automatic remediation hints if specialist output quality becomes a recurring gap. |
+| D18 | 2026-11-11 | Every blocked check has exactly one persisted `Blocker`, validated against the owning persona's blocker schema and redacted before persistence. A blocked check carries zero findings, and a blocker-bearing outcome is forced to `blocked` even if a plugin reports `passed`. Planning failures materialize blockers before execution; runtime refusals replace them through the same one-per-check path. | A free-text blocked status hides why work stopped and whether it is covered elsewhere. A separate structured record preserves the refusal boundary without polluting findings, scoring, or the kill switch, and makes a blocked check impossible to misreport as a pass. | Add automatic `covered_by` resolution when another check's evidence covers the same risk, or add per-blocker expiry when a target changes. |

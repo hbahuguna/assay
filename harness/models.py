@@ -216,6 +216,43 @@ class InvalidFinding:
 
 
 @dataclasses.dataclass
+class Blocker:
+    """Structured refusal or coverage gap from a blocked check.
+
+    A blocker is not a finding.  It records what the harness attempted, where
+    the tool/persona boundary stopped it, what evidence would unblock it, and
+    whether another check covers the gap.
+    """
+
+    id: str
+    persona: str
+    check_id: str
+    attempted_action: str
+    boundary: str
+    unblock_evidence: List[str] = dataclasses.field(default_factory=list)
+    covered_elsewhere: bool = False
+    covered_by: List[str] = dataclasses.field(default_factory=list)
+    recorded_at: str = dataclasses.field(default_factory=utc_now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Blocker":
+        return cls(
+            id=data["id"],
+            persona=data.get("persona", ""),
+            check_id=data.get("check_id", ""),
+            attempted_action=data.get("attempted_action", ""),
+            boundary=data.get("boundary", ""),
+            unblock_evidence=list(data.get("unblock_evidence", [])),
+            covered_elsewhere=bool(data.get("covered_elsewhere", False)),
+            covered_by=list(data.get("covered_by", [])),
+            recorded_at=data.get("recorded_at", utc_now()),
+        )
+
+
+@dataclasses.dataclass
 class Check:
     id: str
     title: str
@@ -359,6 +396,7 @@ class RunState:
     checks: List[Check] = dataclasses.field(default_factory=list)
     findings: List[Finding] = dataclasses.field(default_factory=list)
     invalid_findings: List[InvalidFinding] = dataclasses.field(default_factory=list)
+    blockers: List[Blocker] = dataclasses.field(default_factory=list)
     contract_failures: Dict[str, int] = dataclasses.field(default_factory=dict)
     contract_failure_streaks: Dict[str, int] = dataclasses.field(default_factory=dict)
     degraded_personas: List[str] = dataclasses.field(default_factory=list)
@@ -392,6 +430,7 @@ class RunState:
             "checks": [c.to_dict() for c in self.checks],
             "findings": [f.to_dict() for f in self.findings],
             "invalid_findings": [f.to_dict() for f in self.invalid_findings],
+            "blockers": [b.to_dict() for b in self.blockers],
             "contract_failures": dict(self.contract_failures),
             "contract_failure_streaks": dict(self.contract_failure_streaks),
             "degraded_personas": list(self.degraded_personas),
@@ -427,6 +466,7 @@ class RunState:
             invalid_findings=[
                 InvalidFinding.from_dict(f) for f in data.get("invalid_findings", [])
             ],
+            blockers=[Blocker.from_dict(b) for b in data.get("blockers", [])],
             contract_failures={
                 str(key): int(value)
                 for key, value in dict(data.get("contract_failures", {})).items()

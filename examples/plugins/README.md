@@ -64,3 +64,23 @@ checks:
 A plugin that is unowned, owned by multiple personas, unsigned, duplicated, or
 malformed becomes a `blocked` check with the reason in `actual` and
 `skip_reason`. The rest of the run continues.
+
+## Refusals
+
+A plugin that reaches a tool or scope boundary returns a blocker instead of a
+finding:
+
+```python
+outcome = CheckOutcome(status=CheckStatus.BLOCKED.value)
+outcome.add_blocker(
+    attempted_action="Submit a synthetic checkout transaction.",
+    boundary="The run is read-only and has no disposable tenant.",
+    unblock_evidence=["Provide an approved test tenant and transaction budget."],
+)
+return outcome
+```
+
+The orchestrator persists exactly one blocker for the check, drops any findings
+from that outcome, redacts blocker text, and forces the check to `blocked` even
+if the plugin reported `passed`. The blocker is validated against the owning
+persona's `## Blocker schema` and appears in the report and `status` output.

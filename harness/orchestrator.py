@@ -30,6 +30,7 @@ from .determinism import (
 from .errors import HarnessError, PersonaError, StateError, TargetError
 from .evidence import EvidenceStore
 from .models import (
+    Blocker,
     Check,
     CheckStatus,
     Finding,
@@ -46,12 +47,13 @@ from .models import (
     new_id,
     utc_now,
 )
-from .outcomes import CheckOutcome
+from .outcomes import BlockerDraft, CheckOutcome
 from .personas import (
     Persona,
     load_personas,
     select_personas,
     unknown_persona_check_ids,
+    validate_blocker,
     validate_payload,
     validate_persona_checks,
 )
@@ -435,6 +437,9 @@ class Orchestrator:
                 if check.status in (CheckStatus.RUNNING.value, CheckStatus.PLANNED.value, CheckStatus.ERROR.value)
             }
             state.findings = [finding for finding in state.findings if finding.check_id not in rerun_ids]
+            state.blockers = [
+                blocker for blocker in state.blockers if blocker.check_id not in rerun_ids
+            ]
             remaining_invalid = [
                 finding for finding in state.invalid_findings if finding.check_id not in rerun_ids
             ]
@@ -577,6 +582,13 @@ class Orchestrator:
         )
         apply_risk_weights(checks, self.state.risks)
         self.state.checks = checks
+        self.state.blockers = []
+        for check in checks:
+            if check.status == CheckStatus.BLOCKED.value:
+                self._record_blocker(
+                    check,
+                    boundary=check.actual or check.skip_reason,
+                )
         by_kind: Dict[str, int] = {}
         by_persona: Dict[str, int] = {}
         for check in checks:
@@ -760,13 +772,153 @@ class Orchestrator:
             return True
         return halt
 
+    def _blocker_for_check(self, check_id: str) -> Optional[Blocker]:
+        assert self.state is not None
+        return next(
+            (blocker for blocker in self.state.blockers if blocker.check_id == check_id),
+            None,
+        )
+
+    def _unblock_hint(self, check: Check, boundary: str) -> List[str]:
+        text = boundary.lower()
+        if "persona" in text and ("owner" in text or "ownership" in text):
+            return [
+                "Declare exactly one persona owner for check '{}' and re-run.".format(
+                    check.id
+                )
+            ]
+        if any(token in text for token in ("plugin", "signature", "trusted", "verify")):
+            return [
+                "Install a signed plugin with trusted metadata for check '{}' and re-run.".format(
+                    check.id
+                )
+            ]
+        if any(token in text for token in ("browser", "playwright", "chromium", "operate")):
+            return [
+                "Provide a runnable browser target and a Playwright/Chromium installation, "
+                "then re-run check '{}'.".format(check.id)
+            ]
+        if any(token in text for token in ("source", "static", "inventory")):
+            return [
+                "Provide a readable source directory for check '{}' and re-run.".format(
+                    check.id
+                )
+            ]
+        return [
+            "Resolve the reported boundary for check '{}' and re-run it.".format(check.id)
+        ]
+
+    def _record_blocker(
+        self,
+        check: Check,
+        blocker: Optional[BlockerDraft] = None,
+        boundary: str = "",
+    ) -> Blocker:
+        """Create exactly one structured blocker for a blocked check."""
+
+        assert self.state is not None
+        existing = self._blocker_for_check(check.id)
+        if existing is not None:
+            return existing
+        if not isinstance(blocker, BlockerDraft):
+            blocker = None
+        boundary_text = _redact_string(
+            str(
+                (blocker.boundary if blocker else "")
+                or boundary
+                or check.actual
+                or check.skip_reason
+                or "Check was blocked before execution."
+            )
+        )
+        attempted = _redact_string(
+            str(
+                (blocker.attempted_action if blocker else "")
+                or check.title
+                or check.id
+            )
+        )
+        unblock_evidence = (
+            [_redact_string(str(item)) for item in blocker.unblock_evidence]
+            if blocker
+            and isinstance(blocker.unblock_evidence, (list, tuple))
+            and blocker.unblock_evidence
+            else self._unblock_hint(check, boundary_text)
+        )
+        covered_by = (
+            [_redact_string(str(item)) for item in blocker.covered_by]
+            if blocker and isinstance(blocker.covered_by, (list, tuple))
+            else []
+        )
+        record = Blocker(
+            id=new_id("blocker"),
+            persona=check.persona,
+            check_id=check.id,
+            attempted_action=attempted,
+            boundary=boundary_text,
+            unblock_evidence=unblock_evidence,
+            covered_elsewhere=(
+                blocker.covered_elsewhere
+                if blocker is not None and isinstance(blocker.covered_elsewhere, bool)
+                else False
+            ),
+            covered_by=covered_by,
+            recorded_at=utc_now(),
+        )
+        persona = self.persona_map.get(check.persona)
+        if persona is not None:
+            errors = validate_blocker(record.to_dict(), persona)
+            if errors:
+                self.log(
+                    "WARNING: blocker for check {} violates the {} blocker contract: {}".format(
+                        check.id, persona.id, "; ".join(errors[:5])
+                    )
+                )
+        self.state.blockers.append(record)
+        return record
+
     def _record_outcome(self, check: Check, outcome: CheckOutcome) -> bool:
         assert self.state is not None
-        check.status = outcome.status
-        check.actual = outcome.actual
+        blocker_draft = (
+            outcome.blocker if isinstance(outcome.blocker, BlockerDraft) else None
+        )
+        existing_blocker = self._blocker_for_check(check.id)
+        blocked = (
+            outcome.status == CheckStatus.BLOCKED.value
+            or blocker_draft is not None
+            or existing_blocker is not None
+        )
+        check.status = CheckStatus.BLOCKED.value if blocked else outcome.status
         check.evidence = list(outcome.evidence)
-        check.metadata = dict(outcome.metadata)
-        if outcome.status in (
+        if blocked:
+            boundary = _redact_string(
+                str(
+                    (blocker_draft.boundary if blocker_draft else "")
+                    or outcome.metadata.get("boundary")
+                    or outcome.metadata.get("limitation")
+                    or outcome.actual
+                    or "Check was blocked."
+                )
+            )
+            check.actual = _redact_string(str(outcome.actual)) or boundary
+            check.metadata = _redact_payload(dict(outcome.metadata))
+            check.finding_ids = []
+            check.skip_reason = str(
+                check.metadata.get("limitation") or boundary
+            )
+            if existing_blocker is None:
+                self._record_blocker(check, blocker=blocker_draft, boundary=boundary)
+            if outcome.findings:
+                self.log(
+                    "WARNING: {} was blocked; {} finding(s) were discarded because a "
+                    "blocker cannot carry findings.".format(
+                        check.id, len(outcome.findings)
+                    )
+                )
+        else:
+            check.actual = outcome.actual
+            check.metadata = dict(outcome.metadata)
+        if check.status in (
             CheckStatus.PASSED.value,
             CheckStatus.FAILED.value,
             CheckStatus.BLOCKED.value,
@@ -774,41 +926,47 @@ class Orchestrator:
             CheckStatus.ERROR.value,
         ):
             check.completed_at = utc_now()
-        if outcome.status in (CheckStatus.BLOCKED.value, CheckStatus.SKIPPED.value):
+        if check.status == CheckStatus.SKIPPED.value:
             check.skip_reason = str(outcome.metadata.get("limitation") or outcome.actual)
-        if outcome.status == CheckStatus.ERROR.value:
+        if outcome.status == CheckStatus.ERROR.value and not blocked:
             self.log("WARNING: {} errored: {}".format(check.id, outcome.actual))
         recorded_findings: List[Finding] = []
         invalid_count = 0
-        for draft in outcome.findings:
-            payload = _draft_payload(draft)
-            persona = self.persona_map.get(check.persona)
-            errors = (
-                validate_payload(payload, persona.output_schema)
-                if persona is not None
-                else []
-            )
-            if errors:
-                self._quarantine_finding(check, payload, errors)
-                invalid_count += 1
-                continue
-            finding = self._to_finding(payload, check)
-            existing = next(
-                (item for item in self.state.findings if item.fingerprint == finding.fingerprint), None
-            )
-            if existing is not None:
-                for path in finding.evidence:
-                    if path and path not in existing.evidence:
-                        existing.evidence.append(path)
-                if existing.id not in check.finding_ids:
-                    check.finding_ids.append(existing.id)
-                recorded_findings.append(existing)
+        if not blocked:
+            for draft in outcome.findings:
+                payload = _draft_payload(draft)
+                persona = self.persona_map.get(check.persona)
+                errors = (
+                    validate_payload(payload, persona.output_schema)
+                    if persona is not None
+                    else []
+                )
+                if errors:
+                    self._quarantine_finding(check, payload, errors)
+                    invalid_count += 1
+                    continue
+                finding = self._to_finding(payload, check)
+                existing = next(
+                    (
+                        item
+                        for item in self.state.findings
+                        if item.fingerprint == finding.fingerprint
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    for path in finding.evidence:
+                        if path and path not in existing.evidence:
+                            existing.evidence.append(path)
+                    if existing.id not in check.finding_ids:
+                        check.finding_ids.append(existing.id)
+                    recorded_findings.append(existing)
+                    self._record_valid_contract(check.persona)
+                    continue
+                self.state.findings.append(finding)
+                check.finding_ids.append(finding.id)
+                recorded_findings.append(finding)
                 self._record_valid_contract(check.persona)
-                continue
-            self.state.findings.append(finding)
-            check.finding_ids.append(finding.id)
-            recorded_findings.append(finding)
-            self._record_valid_contract(check.persona)
         if invalid_count:
             check.metadata["invalid_findings"] = invalid_count
         self.state.touch()

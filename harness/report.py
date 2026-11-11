@@ -13,14 +13,32 @@ REPORT_SCHEMA = "quality-harness.report/v1"
 
 def _coverage(state: RunState) -> Dict[str, Any]:
     counts = {status.value: 0 for status in CheckStatus}
+    blockers_by_check: Dict[str, int] = {}
+    blockers_by_persona: Dict[str, int] = {}
+    for blocker in state.blockers:
+        blockers_by_check[blocker.check_id] = (
+            blockers_by_check.get(blocker.check_id, 0) + 1
+        )
+        blockers_by_persona[blocker.persona] = (
+            blockers_by_persona.get(blocker.persona, 0) + 1
+        )
     by_domain: Dict[str, Dict[str, int]] = {}
     for check in state.checks:
         counts[check.status] = counts.get(check.status, 0) + 1
         bucket = by_domain.setdefault(
             check.domain,
-            {"planned": 0, "passed": 0, "failed": 0, "blocked": 0, "skipped": 0, "error": 0},
+            {
+                "planned": 0,
+                "passed": 0,
+                "failed": 0,
+                "blocked": 0,
+                "skipped": 0,
+                "error": 0,
+                "blockers": 0,
+            },
         )
         bucket["planned"] += 1
+        bucket["blockers"] += blockers_by_check.get(check.id, 0)
         if check.status == CheckStatus.PASSED.value:
             bucket["passed"] += 1
         elif check.status == CheckStatus.FAILED.value:
@@ -33,6 +51,9 @@ def _coverage(state: RunState) -> Dict[str, Any]:
             bucket["error"] += 1
     total = len(state.checks)
     executed = counts.get(CheckStatus.PASSED.value, 0) + counts.get(CheckStatus.FAILED.value, 0)
+    covered_blockers = len(
+        [blocker for blocker in state.blockers if blocker.covered_elsewhere]
+    )
     return {
         "total_checks": total,
         "executed": executed,
@@ -42,6 +63,10 @@ def _coverage(state: RunState) -> Dict[str, Any]:
         "skipped": counts.get(CheckStatus.SKIPPED.value, 0),
         "error": counts.get(CheckStatus.ERROR.value, 0),
         "planned_not_run": counts.get(CheckStatus.PLANNED.value, 0),
+        "blockers": len(state.blockers),
+        "blockers_covered_elsewhere": covered_blockers,
+        "blockers_uncovered": len(state.blockers) - covered_blockers,
+        "blockers_by_persona": blockers_by_persona,
         "executed_pct": round(executed / total * 100.0, 1) if total else 0.0,
         "by_domain": by_domain,
     }
@@ -82,6 +107,10 @@ def build_report(
     )
     invalid_findings = sorted(
         state.invalid_findings,
+        key=lambda item: (item.recorded_at, item.id),
+    )
+    blockers = sorted(
+        state.blockers,
         key=lambda item: (item.recorded_at, item.id),
     )
     contract_failures = {
@@ -175,6 +204,7 @@ def build_report(
         "findings": [finding.to_dict() for finding in findings],
         "finding_counts": severity_counts,
         "invalid_findings": [finding.to_dict() for finding in invalid_findings],
+        "blockers": [blocker.to_dict() for blocker in blockers],
         "contract_failures": {
             "total": sum(contract_failures.values()),
             "by_persona": contract_failures,

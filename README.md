@@ -20,7 +20,7 @@ Risk Analysis -> Test Planning -> Execution -> Evidence Collection -> Confidence
 Every phase writes durable state to `.harness/`. The orchestrator, not a model,
 decides check order, budget, scoring, and whether the kill switch fires. Three
 specialist personas own disjoint checks and declare their tools, output schema,
-and refusal rules in `personas/`.
+blocker schema, and refusal rules in `personas/`.
 
 ## Requirements
 
@@ -219,10 +219,15 @@ the run continues with source evidence.
 - `invalid_findings`: quarantined findings with the owning persona, check id,
   validation errors, and a redacted payload. They never affect scoring, finding
   counts, or kill-switch evaluation.
+- `blockers`: one structured record per blocked check, with the attempted
+  action, the boundary that stopped it, the evidence needed to unblock it, and
+  whether another check covers the gap. `skipped` checks are not blockers.
+  `status` exposes the same records plus per-persona and per-check counts.
 - `contract_failures`: per-persona schema-failure counts and the list of
   personas marked degraded after three consecutive invalid findings.
 - `checks`: planned checks, status, weight, actual result, intent, and evidence.
-- `coverage`: executed, blocked, skipped, errored, and planned-not-run counts.
+- `coverage`: executed, blocked, skipped, errored, planned-not-run, and blocker
+  counts by persona and domain. Blockers stay visible as coverage gaps.
 - `phases`, `risks`, `personas`, `inventory`, kill-switch state, and evidence
   summary. Each persona entry includes its contract-failure count, current
   streak, and `degraded` flag.
@@ -237,7 +242,8 @@ Example shape:
   "decision": {"decision": "hold", "rationale": "..."},
   "confidence": {"score": 30.2, "band": "low", "gate": {"status": "fail"}},
   "findings": [{"severity": "high", "title": "..."}],
-  "coverage": {"total_checks": 7, "executed": 7, "blocked": 0}
+  "blockers": [],
+  "coverage": {"total_checks": 7, "executed": 7, "blocked": 0, "blockers": 0}
 }
 ```
 
@@ -302,10 +308,10 @@ or the report.
 | `accessibility` | Source markup heuristics and rendered accessibility signals |
 
 Each file declares YAML frontmatter, role, available tools, a JSON output
-schema, and refusal handling. Check ownership is derived from the frontmatter
-`checks` lists. Every built-in check must be listed by exactly one persona; an
-unowned check fails planning and duplicate ownership is rejected before
-execution. See `personas/README.md`.
+schema, a JSON blocker schema, and refusal handling. Check ownership is derived
+from the frontmatter `checks` lists. Every built-in check must be listed by
+exactly one persona; an unowned check fails planning and duplicate ownership is
+rejected before execution. See `personas/README.md`.
 
 A finding that violates its owner's output schema is quarantined before it can
 enter state as a normal finding. The report keeps the persona, check id,
