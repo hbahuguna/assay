@@ -13,6 +13,8 @@ tools:
 checks:
   - static.accessibility
   - browser.accessibility
+  - browser.overflow
+  - browser.focus_order
 ---
 
 # Accessibility Specialist

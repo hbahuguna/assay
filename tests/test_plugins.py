@@ -103,6 +103,8 @@ class RegistryTests(unittest.TestCase):
                 "browser.accessibility",
                 "browser.content",
                 "browser.links",
+                "browser.overflow",
+                "browser.focus_order",
             },
         )
 

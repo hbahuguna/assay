@@ -170,7 +170,17 @@ JS_SNAPSHOT = r"""
     h1s,
     headingCounts,
     scripts,
-    links
+    links,
+    viewportWidth: window.innerWidth,
+    documentScrollWidth: document.documentElement.scrollWidth,
+    overflowingElements: Array.from(document.querySelectorAll('*')).filter(el => {
+      try { return el.getBoundingClientRect().right > window.innerWidth + 1; } catch (e) { return false; }
+    }).slice(0, 5).map(el => ({
+      selector: selectorFor(el),
+      width: Math.round(el.getBoundingClientRect().width),
+      right: Math.round(el.getBoundingClientRect().right)
+    })),
+    focusOrderMatchesDom: Array.from(document.querySelectorAll('[tabindex]')).every(el => parseInt(el.getAttribute('tabindex') || '0', 10) <= 0)
   };
 }
 """
@@ -872,6 +882,66 @@ class BrowserCheckRunner:
                     "Capture finalization failed: {}".format(redact_text(str(exc)))
                 )
             await controller.close()
+
+    def _eval_overflow(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        snapshot = controller.snapshot
+        viewport_width = int(controller.options.viewport_width)
+        scroll_width = int(snapshot.get("documentScrollWidth", 0) or 0)
+        overflowing = snapshot.get("overflowingElements") or []
+        if scroll_width > viewport_width + 1 or overflowing:
+            offender = overflowing[0] if overflowing else {"selector": "document", "right": scroll_width}
+            outcome.add_finding(
+                title="The page overflows the {}px mobile viewport".format(viewport_width),
+                severity=Severity.MEDIUM.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Customers on small screens must scroll horizontally or lose content.",
+                location=str(offender.get("selector", "document")),
+                reproduction="Resize the viewport to {}px and inspect the overflowing element.".format(viewport_width),
+                remediation="Constrain widths, wrapping, and media so content fits the viewport.",
+                verification="Re-run the mobile check and confirm no horizontal overflow.",
+                tags=["responsive", "overflow", "mobile"],
+            )
+            outcome.actual = "Horizontal overflow: scroll width {} > viewport {}; offending element {}.".format(
+                scroll_width, viewport_width, offender.get("selector", "document")
+            )
+            outcome.metadata["offending_element"] = offender
+            outcome.metadata["viewport_width"] = viewport_width
+            outcome.metadata["scroll_width"] = scroll_width
+        else:
+            outcome.status = CheckStatus.PASSED.value
+            outcome.actual = "No horizontal overflow: scroll width {} <= viewport {}.".format(
+                scroll_width, viewport_width
+            )
+            outcome.metadata["viewport_width"] = viewport_width
+            outcome.metadata["scroll_width"] = scroll_width
+        return outcome
+
+    def _eval_focus_order(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+        outcome = CheckOutcome(evidence=self._common_evidence(controller))
+        snapshot = controller.snapshot
+        positive = int(snapshot.get("positiveTabindex", 0) or 0)
+        matches = bool(snapshot.get("focusOrderMatchesDom", True))
+        if positive > 0 or not matches:
+            outcome.add_finding(
+                title="Keyboard focus order does not follow document order",
+                severity=Severity.MEDIUM.value,
+                domain="accessibility",
+                strength=Strength.OBSERVED.value,
+                consequence="Keyboard and screen-reader users can be sent to controls out of visual order.",
+                location=sanitize_url(navigation.final_url),
+                reproduction="Tab through the page and compare focus order with the visual order.",
+                remediation="Remove positive tabindex values and rely on DOM order.",
+                verification="Re-run the check and confirm focus follows the document order.",
+                tags=["a11y", "focus", "keyboard"],
+            )
+            outcome.actual = "{} positive tabindex value(s) disturbed focus order.".format(positive)
+        else:
+            outcome.status = CheckStatus.PASSED.value
+            outcome.actual = "Focus order follows document order."
+        outcome.metadata["positive_tabindex_count"] = positive
+        return outcome
 
     def _common_evidence(self, controller: BrowserController) -> List[str]:
         keys = ["screenshot", "headers", "console", "network", "snapshot", "cookies", "navigation"]

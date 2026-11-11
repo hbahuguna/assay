@@ -231,6 +231,19 @@ If the state is missing, empty, or expired, browser checks are blocked with an
 actionable limitation while anonymous static checks still run. Cookies and
 tokens are redacted before they reach reports or evidence.
 
+The responsive/mobile Operate pack is optional and runs at a mobile viewport:
+
+```bash
+python -m harness run --target http://127.0.0.1:8765/ \
+  --source examples/sample-repo \
+  --mobile --mobile-viewport 390x844 \
+  --root .harness-live
+```
+
+Every browser check records its viewport in `metadata`. The pack adds
+`browser.overflow` and `browser.focus_order`; disabling `--mobile` leaves the
+desktop browser result unchanged.
+
 Optional browser capture is off by default and can be enabled per run:
 
 ```bash

@@ -138,6 +138,10 @@ class RunOptions:
     timeout_ms: int = 30000
     viewport: str = "1440x900"
     kill_on: str = "critical"
+    mobile: bool = False
+    mobile_viewport: str = "390x844"
+    mobile: bool = False
+    mobile_viewport: str = "390x844"
     browser_har: bool = False
     browser_trace: bool = False
     browser_video: bool = False
@@ -583,6 +587,7 @@ class Orchestrator:
             self.options.no_browser,
             registry=self.registry,
             all_personas=self.all_personas,
+            mobile=self.options.mobile,
         )
         apply_risk_weights(checks, self.state.risks)
         self.state.checks = checks
@@ -710,19 +715,37 @@ class Orchestrator:
                     CheckStatus.SKIPPED.value,
                 )
             ]
-            if browser_checks:
+            desktop_browser_checks = [
+                check
+                for check in browser_checks
+                if check.id not in {"browser.overflow", "browser.focus_order"}
+            ]
+            mobile_browser_checks = [
+                check
+                for check in browser_checks
+                if check.id in {"browser.overflow", "browser.focus_order"}
+            ]
+            if desktop_browser_checks:
                 if self.state.target.kind != "url":
-                    for check in browser_checks:
+                    for check in desktop_browser_checks:
                         self._record_outcome(
                             check,
                             CheckOutcome(
                                 status=CheckStatus.BLOCKED.value,
                                 actual="No live URL target was supplied; Operate coverage is unavailable.",
-                                metadata={"limitation": "Operate coverage was not available for this run."},
+                                metadata={
+                                    "limitation": "Operate coverage was not available for this run.",
+                                    "viewport": self.options.viewport,
+                                },
                             ),
                         )
                 else:
                     viewport = self.options.viewport.lower().split("x", 1)
+
+                    def desktop_callback(check: Check, outcome: CheckOutcome) -> bool:
+                        outcome.metadata.setdefault("viewport", self.options.viewport)
+                        return self._browser_outcome_callback(check, outcome)
+
                     runner = BrowserCheckRunner(
                         self.evidence,  # type: ignore[arg-type]
                         BrowserOptions(
@@ -735,9 +758,44 @@ class Orchestrator:
                             capture_video=self.options.browser_video,
                             storage_state=self.options.storage_state,
                         ),
-                        self._browser_outcome_callback,
+                        desktop_callback,
                     )
-                    runner.run(self.state.target.resolved, browser_checks)
+                    runner.run(self.state.target.resolved, desktop_browser_checks)
+            if mobile_browser_checks:
+                mobile_viewport = self.options.mobile_viewport.lower().split("x", 1)
+                if self.state.target.kind != "url":
+                    for check in mobile_browser_checks:
+                        self._record_outcome(
+                            check,
+                            CheckOutcome(
+                                status=CheckStatus.BLOCKED.value,
+                                actual="No live URL target was supplied; Operate coverage is unavailable.",
+                                metadata={
+                                    "limitation": "Operate coverage was not available for this run.",
+                                    "viewport": self.options.mobile_viewport,
+                                },
+                            ),
+                        )
+                else:
+                    def mobile_callback(check: Check, outcome: CheckOutcome) -> bool:
+                        outcome.metadata.setdefault("viewport", self.options.mobile_viewport)
+                        return self._browser_outcome_callback(check, outcome)
+
+                    runner = BrowserCheckRunner(
+                        self.evidence,  # type: ignore[arg-type]
+                        BrowserOptions(
+                            headless=self.options.headless,
+                            timeout_ms=self.options.timeout_ms,
+                            viewport_width=int(mobile_viewport[0]),
+                            viewport_height=int(mobile_viewport[1]),
+                            capture_har=self.options.browser_har,
+                            capture_trace=self.options.browser_trace,
+                            capture_video=self.options.browser_video,
+                            storage_state=self.options.storage_state,
+                        ),
+                        mobile_callback,
+                    )
+                    runner.run(self.state.target.resolved, mobile_browser_checks)
 
         if self.state.kill_switch.triggered:
             self._mark_remaining_skipped("Kill switch halted execution.")

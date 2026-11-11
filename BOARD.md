@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-013 - Add a responsive and mobile Operate check pack
-
-- **Epic:** E3 Inspect and Operate Evidence
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-010
-- **Status:** Ready
-- **Description:** Run the browser checks at desktop and mobile viewports and add
-  a deterministic overflow and focus-order probe for the demo fixture.
-- **Acceptance Criteria:**
-  - The report records the viewport for every browser check.
-  - A page that overflows the mobile viewport fails with a screenshot and the
-    offending element.
-  - Focus order matches DOM order on the clean fixture.
-  - The desktop-only result is unchanged when the mobile pack is disabled.
-
 ### QH-014 - Calibrate weights and caps against labeled fixtures
 
 - **Epic:** E4 Release Confidence and Reporting
@@ -555,9 +539,9 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-012` are complete, so `QH-013` is now
-the lowest-numbered unblocked task. `QH-019` remains the first
-commercial-critical-path task.
+No task is claimed. `QH-001` through `QH-013` are complete, so `QH-014` is now
+the lowest-numbered unblocked task (and an unblocked P0). `QH-019` remains the
+first commercial-critical-path task.
 
 ## Blockers
 
@@ -894,6 +878,31 @@ commercial-critical-path task.
   expired states block browser checks while static checks run, and that
   `env:VAR` secret references work. Full suite: 102 passing tests with Python
   3.11. `README.md` documents `--storage-state`.
+
+### QH-013 - Add a responsive and mobile Operate check pack
+
+- **Epic:** E3 Inspect and Operate Evidence
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-010
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added an optional mobile responsive Operate pack with
+  `browser.overflow` and `browser.focus_order` checks. The pack runs at a mobile
+  viewport (default 390x844) while existing browser checks remain at the desktop
+  viewport. Every browser check records its viewport in `metadata`, and mobile
+  overflow failures include the offending element and a screenshot.
+- **Acceptance Criteria:**
+  - The report records the viewport for every browser check.
+  - A page that overflows the mobile viewport fails with a screenshot and the
+    offending element.
+  - Focus order matches DOM order on the clean fixture.
+  - The desktop-only result is unchanged when the mobile pack is disabled.
+- **Evidence:** `tests/test_mobile_browser.py` verifies viewport metadata for
+  every browser check, a failing overflow check with an offending element and
+  screenshot, passing focus order on the clean fixture, and unchanged desktop
+  results when `--mobile` is disabled. Full suite: 106 passing tests with Python
+  3.11. `README.md` documents `--mobile` and `--mobile-viewport`.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

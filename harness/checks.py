@@ -166,6 +166,26 @@ CHECK_CATALOG: List[CheckDefinition] = [
         base_weight=0.9,
         requires="url",
     ),
+    CheckDefinition(
+        id="browser.overflow",
+        title="The page does not overflow the mobile viewport",
+        domain="accessibility",
+        kind="browser",
+        intent="Catch horizontal scrolling and clipped content on small screens.",
+        expected="No rendered element extends beyond the mobile viewport width.",
+        base_weight=0.8,
+        requires="url",
+    ),
+    CheckDefinition(
+        id="browser.focus_order",
+        title="Keyboard focus order follows the document order",
+        domain="accessibility",
+        kind="browser",
+        intent="Keep keyboard and assistive-technology navigation predictable.",
+        expected="No positive tabindex values disturb the natural focus order.",
+        base_weight=0.8,
+        requires="url",
+    ),
 ]
 
 
@@ -198,6 +218,7 @@ def plan_checks(
     no_browser: bool = False,
     registry: Optional[Any] = None,
     all_personas: Optional[Iterable[Persona]] = None,
+    mobile: bool = False,
 ) -> List[Check]:
     """Build the planned checks for the selected personas.
 
@@ -249,6 +270,8 @@ def plan_checks(
         if owner not in selected:
             continue
         if not _applicable(definition, inventory, target, no_browser):
+            continue
+        if not mobile and definition.id in {"browser.overflow", "browser.focus_order"}:
             continue
         checks.append(
             Check(

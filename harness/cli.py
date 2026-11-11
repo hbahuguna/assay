@@ -115,6 +115,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Keep at most this many historical runs after the run completes.",
     )
+    run.add_argument("--mobile", dest="mobile", action="store_true", help="Enable the responsive/mobile Operate check pack.")
+    run.add_argument("--mobile-pack", dest="mobile", action="store_true", help="Alias for --mobile.")
+    run.add_argument("--responsive", dest="mobile", action="store_true", help="Alias for --mobile.")
+    run.add_argument("--mobile-viewport", default="390x844", help="Mobile viewport for the responsive pack, e.g. 390x844.")
     run.add_argument("--browser-har", action="store_true", help="Capture a redacted HTTP Archive for browser runs.")
     run.add_argument("--browser-trace", action="store_true", help="Capture a Playwright trace for browser runs.")
     run.add_argument("--browser-video", action="store_true", help="Capture browser video for browser runs.")
@@ -214,6 +218,8 @@ def _run(args: argparse.Namespace) -> int:
         timeout_ms=int(args.timeout * 1000),
         viewport=args.viewport,
         kill_on=args.kill_on,
+        mobile=args.mobile,
+        mobile_viewport=args.mobile_viewport,
         browser_har=args.browser_har,
         browser_trace=args.browser_trace,
         browser_video=args.browser_video,
