@@ -10,8 +10,12 @@ It is scoped engineering judgment, not the probability that no defect exists.
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+from .errors import PolicyError
 from .models import Check, CheckStatus, Confidence, Finding, Severity, severity_rank
 
 FORMULA_VERSION = "weighted-coverage-v1"
@@ -35,6 +39,184 @@ SEVERITY_PENALTY = {
 }
 
 SCOPE_FACTOR = {"both": 1.0, "source": 0.9, "live": 0.9, "none": 0.75}
+
+DEFAULT_POLICY_ID = "advisory-v1"
+DEFAULT_POLICY_VERSION = "1.0"
+
+
+@dataclass
+class Policy:
+    id: str = DEFAULT_POLICY_ID
+    version: str = DEFAULT_POLICY_VERSION
+    domain_weights: Dict[str, float] = field(default_factory=lambda: dict(DOMAIN_WEIGHTS))
+    severity_penalties: Dict[str, float] = field(default_factory=lambda: dict(SEVERITY_PENALTY))
+    scope_factors: Dict[str, float] = field(default_factory=lambda: dict(SCOPE_FACTOR))
+    penalty_cap: float = 70.0
+    caps: Dict[str, float] = field(default_factory=lambda: {"critical": 30.0, "two_high": 65.0, "halted": 25.0})
+    gate: Dict[str, Any] = field(
+        default_factory=lambda: {
+            "pass_score": 80.0,
+            "warn_score": 60.0,
+            "fail_on_critical": True,
+            "fail_on_high": False,
+            "coverage_warn": 0.8,
+            "coverage_fail": 0.7,
+        }
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "schema_version": "quality-harness.policy/v1",
+            "id": self.id,
+            "version": self.version,
+            "domain_weights": dict(self.domain_weights),
+            "severity_penalties": dict(self.severity_penalties),
+            "scope_factors": dict(self.scope_factors),
+            "penalty_cap": self.penalty_cap,
+            "caps": dict(self.caps),
+            "gate": dict(self.gate),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "Policy":
+        if not isinstance(data, dict):
+            raise PolicyError("Policy must be a JSON object.")
+        allowed = {
+            "schema_version",
+            "id",
+            "version",
+            "domain_weights",
+            "severity_penalties",
+            "scope_factors",
+            "penalty_cap",
+            "caps",
+            "gate",
+        }
+        unknown = set(data) - allowed
+        if unknown:
+            raise PolicyError("Unknown policy field(s): {}.".format(", ".join(sorted(unknown))))
+        if data.get("schema_version", "quality-harness.policy/v1") != "quality-harness.policy/v1":
+            raise PolicyError("Policy schema_version must be 'quality-harness.policy/v1'.")
+        policy_id = data.get("id", DEFAULT_POLICY_ID)
+        version = data.get("version", DEFAULT_POLICY_VERSION)
+        if not isinstance(policy_id, str) or not policy_id.strip():
+            raise PolicyError("Policy id must be a non-empty string.")
+        if not isinstance(version, str) or not version.strip():
+            raise PolicyError("Policy version must be a non-empty string.")
+
+        domain_weights = data.get("domain_weights", dict(DOMAIN_WEIGHTS))
+        severity_penalties = data.get("severity_penalties", dict(SEVERITY_PENALTY))
+        scope_factors = data.get("scope_factors", dict(SCOPE_FACTOR))
+        penalty_cap = data.get("penalty_cap", 70.0)
+        caps = data.get("caps", {"critical": 30.0, "two_high": 65.0, "halted": 25.0})
+        gate = data.get("gate", {
+            "pass_score": 80.0,
+            "warn_score": 60.0,
+            "fail_on_critical": True,
+            "fail_on_high": False,
+            "coverage_warn": 0.8,
+            "coverage_fail": 0.7,
+        })
+
+        if not isinstance(domain_weights, dict) or not domain_weights:
+            raise PolicyError("domain_weights must be a non-empty object.")
+        for name, value in domain_weights.items():
+            if not isinstance(name, str) or not name:
+                raise PolicyError("domain_weights keys must be non-empty strings.")
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0 or value > 10:
+                raise PolicyError("domain_weights values must be numbers greater than 0 and at most 10.")
+        if not isinstance(severity_penalties, dict) or not severity_penalties:
+            raise PolicyError("severity_penalties must be a non-empty object.")
+        for name, value in severity_penalties.items():
+            if name not in SEVERITY_PENALTY:
+                raise PolicyError("Unknown severity penalty key: {}.".format(name))
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0 or value > 100:
+                raise PolicyError("severity_penalties values must be numbers from 0 to 100.")
+        if not isinstance(scope_factors, dict):
+            raise PolicyError("scope_factors must be an object.")
+        for key in ("both", "source", "live", "none"):
+            if key not in scope_factors:
+                raise PolicyError("scope_factors must include '{}'.".format(key))
+        for key, value in scope_factors.items():
+            if key not in ("both", "source", "live", "none"):
+                raise PolicyError("Unknown scope factor key: {}.".format(key))
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0 or value > 1:
+                raise PolicyError("scope_factors values must be numbers from 0 to 1.")
+        if not isinstance(penalty_cap, (int, float)) or isinstance(penalty_cap, bool) or penalty_cap < 0 or penalty_cap > 100:
+            raise PolicyError("penalty_cap must be a number from 0 to 100.")
+        if not isinstance(caps, dict):
+            raise PolicyError("caps must be an object.")
+        for key in ("critical", "two_high", "halted"):
+            if key not in caps:
+                raise PolicyError("caps must include '{}'.".format(key))
+        for key, value in caps.items():
+            if key not in ("critical", "two_high", "halted"):
+                raise PolicyError("Unknown cap key: {}.".format(key))
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0 or value > 100:
+                raise PolicyError("cap values must be numbers from 0 to 100.")
+        if not (caps["critical"] <= caps["two_high"]):
+            raise PolicyError("critical cap must not exceed the two-high cap.")
+        if not isinstance(gate, dict):
+            raise PolicyError("gate must be an object.")
+        required_gate = {"pass_score", "warn_score", "fail_on_critical", "fail_on_high", "coverage_warn", "coverage_fail"}
+        if not required_gate.issubset(gate):
+            raise PolicyError("gate is missing required keys.")
+        if set(gate) - required_gate:
+            raise PolicyError("gate contains unknown keys.")
+        pass_score = gate["pass_score"]
+        warn_score = gate["warn_score"]
+        if not isinstance(pass_score, (int, float)) or isinstance(pass_score, bool) or not 0 <= pass_score <= 100:
+            raise PolicyError("gate.pass_score must be a number from 0 to 100.")
+        if not isinstance(warn_score, (int, float)) or isinstance(warn_score, bool) or not 0 <= warn_score <= 100:
+            raise PolicyError("gate.warn_score must be a number from 0 to 100.")
+        if pass_score < warn_score:
+            raise PolicyError("gate.pass_score must be at least gate.warn_score.")
+        if not isinstance(gate["fail_on_critical"], bool):
+            raise PolicyError("gate.fail_on_critical must be a boolean.")
+        if not isinstance(gate["fail_on_high"], bool):
+            raise PolicyError("gate.fail_on_high must be a boolean.")
+        for key in ("coverage_warn", "coverage_fail"):
+            value = gate[key]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= 1:
+                raise PolicyError("gate.{} must be a number from 0 to 1.".format(key))
+        if gate["coverage_fail"] > gate["coverage_warn"]:
+            raise PolicyError("gate.coverage_fail must not exceed gate.coverage_warn.")
+
+        return cls(
+            id=policy_id,
+            version=version,
+            domain_weights={str(k): float(v) for k, v in domain_weights.items()},
+            severity_penalties={str(k): float(v) for k, v in severity_penalties.items()},
+            scope_factors={str(k): float(v) for k, v in scope_factors.items()},
+            penalty_cap=float(penalty_cap),
+            caps={str(k): float(v) for k, v in caps.items()},
+            gate={
+                "pass_score": float(pass_score),
+                "warn_score": float(warn_score),
+                "fail_on_critical": bool(gate["fail_on_critical"]),
+                "fail_on_high": bool(gate["fail_on_high"]),
+                "coverage_warn": float(gate["coverage_warn"]),
+                "coverage_fail": float(gate["coverage_fail"]),
+            },
+        )
+
+    def weight_for(self, domain: str) -> float:
+        return float(self.domain_weights.get(domain, 1.0))
+
+    def penalty_for(self, severity: str) -> float:
+        return float(self.severity_penalties.get(severity, 0.0))
+
+
+DEFAULT_POLICY = Policy()
+
+
+def load_policy(path: Path) -> Policy:
+    path = Path(path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise PolicyError("Could not load policy {}: {}".format(path, exc))
+    return Policy.from_dict(data)
 
 
 def _fingerprint(finding: Finding) -> str:
@@ -60,8 +242,16 @@ def score_confidence(
     limitations: List[str] = None,
     halted: bool = False,
     kill_reason: str = "",
+    policy: Any = None,
 ) -> Confidence:
     limitations = list(limitations or [])
+    if policy is None:
+        policy = DEFAULT_POLICY
+    elif isinstance(policy, dict):
+        policy = Policy.from_dict(policy)
+    if not isinstance(policy, Policy):
+        raise PolicyError("policy must be a Policy or policy dictionary.")
+
     if not checks:
         return Confidence(
             score=0.0,
@@ -71,7 +261,7 @@ def score_confidence(
             limitations=limitations
             + ["No checks were planned or executed.", "A confidence score is not a probability of zero defects."],
             breakdown={"formula": FORMULA_VERSION, "planned_checks": 0},
-            gate={"status": "fail", "reasons": ["No checks were planned."], "policy": "advisory-v1"},
+            gate={"status": "fail", "reasons": ["No checks were planned."], "policy": policy.id},
         )
 
     total_weight = sum(max(check.weight, 0.0001) for check in checks)
@@ -83,7 +273,7 @@ def score_confidence(
     quality = (passed_weight / executed_weight * 100.0) if executed_weight else 0.0
 
     scope = _scope_mode(checks)
-    scope_factor = SCOPE_FACTOR.get(scope, 0.75)
+    scope_factor = policy.scope_factors.get(scope, 0.75)
     coverage_factor = 0.25 + 0.75 * coverage_ratio
     base = quality * coverage_factor * scope_factor
 
@@ -98,24 +288,27 @@ def score_confidence(
     for finding in unique_findings:
         severity = str(finding.severity)
         findings_by_severity[severity] = findings_by_severity.get(severity, 0) + 1
-        points = SEVERITY_PENALTY.get(severity, 0.0)
+        points = policy.penalty_for(severity)
         if finding.strength == "suspected":
             points *= 0.5
         penalty += points
-    penalty = min(penalty, 70.0)
+    penalty = min(penalty, policy.penalty_cap)
 
     score = base - penalty
     caps: List[Dict[str, Any]] = []
+    critical_cap = policy.caps.get("critical", 30.0)
+    two_high_cap = policy.caps.get("two_high", 65.0)
+    halted_cap = policy.caps.get("halted", 25.0)
     if findings_by_severity.get(Severity.CRITICAL.value, 0) > 0:
-        if score > 30.0:
-            caps.append({"reason": "critical finding", "cap": 30.0})
-        score = min(score, 30.0)
-    if findings_by_severity.get(Severity.HIGH.value, 0) >= 2 and score > 65.0:
-        caps.append({"reason": "two or more high findings", "cap": 65.0})
-        score = min(score, 65.0)
-    if halted and score > 25.0:
-        caps.append({"reason": "kill switch halted execution", "cap": 25.0})
-        score = min(score, 25.0)
+        if score > critical_cap:
+            caps.append({"reason": "critical finding", "cap": critical_cap})
+        score = min(score, critical_cap)
+    if findings_by_severity.get(Severity.HIGH.value, 0) >= 2 and score > two_high_cap:
+        caps.append({"reason": "two or more high findings", "cap": two_high_cap})
+        score = min(score, two_high_cap)
+    if halted and score > halted_cap:
+        caps.append({"reason": "kill switch halted execution", "cap": halted_cap})
+        score = min(score, halted_cap)
     score = round(max(0.0, min(100.0, score)), 1)
 
     domains: Dict[str, Dict[str, Any]] = {}
@@ -173,17 +366,19 @@ def score_confidence(
         band = "none"
 
     gate_reasons: List[str] = []
-    if findings_by_severity.get(Severity.CRITICAL.value, 0):
+    if policy.gate["fail_on_critical"] and findings_by_severity.get(Severity.CRITICAL.value, 0):
         gate_reasons.append("One or more critical findings are present.")
-    if findings_by_severity.get(Severity.HIGH.value, 0):
+    if policy.gate["fail_on_high"] and findings_by_severity.get(Severity.HIGH.value, 0):
         gate_reasons.append("{} high-severity finding(s) remain open.".format(findings_by_severity[Severity.HIGH.value]))
-    if coverage_ratio < 0.7:
-        gate_reasons.append("Executed coverage is below 70% of planned weight.")
-    if score < 60.0:
-        gate_reasons.append("Confidence is below the advisory release floor of 60.")
-    if findings_by_severity.get(Severity.CRITICAL.value, 0) or score < 60.0:
+    if not policy.gate["fail_on_high"] and findings_by_severity.get(Severity.HIGH.value, 0):
+        gate_reasons.append("{} high-severity finding(s) remain open.".format(findings_by_severity[Severity.HIGH.value]))
+    if coverage_ratio < policy.gate["coverage_fail"]:
+        gate_reasons.append("Executed coverage is below {:.0f}% of planned weight.".format(policy.gate["coverage_fail"] * 100))
+    if score < policy.gate["warn_score"]:
+        gate_reasons.append("Confidence is below the advisory release floor of {}.".format(policy.gate["warn_score"]))
+    if findings_by_severity.get(Severity.CRITICAL.value, 0) or score < policy.gate["warn_score"] or coverage_ratio < policy.gate["coverage_fail"] or (policy.gate["fail_on_high"] and findings_by_severity.get(Severity.HIGH.value, 0)):
         gate_status = "fail"
-    elif score < 80.0 or findings_by_severity.get(Severity.HIGH.value, 0) or coverage_ratio < 0.8:
+    elif score < policy.gate["pass_score"] or findings_by_severity.get(Severity.HIGH.value, 0) or coverage_ratio < policy.gate["coverage_warn"]:
         gate_status = "warn"
     else:
         gate_status = "pass"
@@ -237,6 +432,8 @@ def score_confidence(
             "score": score,
             "band": band,
             "halted": halted,
+            "policy_id": policy.id,
+            "policy_version": policy.version,
         },
-        gate={"status": gate_status, "reasons": gate_reasons, "policy": "advisory-v1"},
+        gate={"status": gate_status, "reasons": gate_reasons, "policy": policy.id},
     )

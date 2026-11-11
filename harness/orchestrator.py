@@ -60,7 +60,7 @@ from .personas import (
 from .plugins import CheckRegistry, PluginCheckRunner, build_registry
 from .report import build_report
 from .risk import RiskAnalyzer
-from .scoring import score_confidence
+from .scoring import Policy, load_policy, score_confidence
 from .static_analysis import Inventory, SourceInspector, StaticCheckRunner
 from .workflows import Workflow, get_workflow
 
@@ -140,12 +140,11 @@ class RunOptions:
     kill_on: str = "critical"
     mobile: bool = False
     mobile_viewport: str = "390x844"
-    mobile: bool = False
-    mobile_viewport: str = "390x844"
     browser_har: bool = False
     browser_trace: bool = False
     browser_video: bool = False
     storage_state: Optional[str] = None
+    policy: Optional[str] = None
     require_personas: int = 3
     verbose: bool = False
     seed: Optional[int] = None
@@ -169,6 +168,7 @@ class Orchestrator:
         self.persona_map: Dict[str, Persona] = {}
         self.registry: Optional[CheckRegistry] = None
         self.workflow: Optional[Workflow] = None
+        self.policy: Optional[Policy] = None
         self.determinism: Optional[Determinism] = None
         self._validate_options()
 
@@ -188,6 +188,7 @@ class Orchestrator:
     def _run(self, resume: bool = False) -> RunState:
         self._load_registry()
         self._load_personas()
+        self._load_policy()
         target = self._resolve_target(self.options.target, self.options.source)
         if resume:
             state = self.state_store.load()
@@ -335,6 +336,17 @@ class Orchestrator:
         self.log(
             "Loaded personas: {}".format(", ".join(persona.id for persona in self.personas))
         )
+
+    def _load_policy(self) -> None:
+        if self.options.policy:
+            path = Path(self.options.policy).expanduser()
+            if not path.is_absolute():
+                cwd_candidate = Path.cwd() / path
+                root_candidate = self.root / path
+                path = cwd_candidate if cwd_candidate.is_file() else root_candidate
+            self.policy = load_policy(path)
+        else:
+            self.policy = Policy()
 
     def _resolve_target(self, raw: str, source: Optional[str]) -> Target:
         raw = (raw or "").strip()
@@ -1241,12 +1253,15 @@ class Orchestrator:
                 "Persona '{}' produced three consecutive schema-invalid findings and is "
                 "marked degraded.".format(persona)
             )
+        if self.policy is not None:
+            self.state.options["policy"] = {"id": self.policy.id, "version": self.policy.version}
         confidence = score_confidence(
             self.state.checks,
             self.state.findings,
             limitations=limitations,
             halted=self.state.kill_switch.triggered,
             kill_reason=self.state.halted_reason,
+            policy=self.policy,
         )
         self.state.confidence = confidence
         self._finish_phase(

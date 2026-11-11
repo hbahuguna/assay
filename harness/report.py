@@ -116,6 +116,11 @@ def build_report(
     contract_failures = {
         persona: int(count) for persona, count in state.contract_failures.items()
     }
+    policy_info = state.options.get("policy", {}) if isinstance(state.options, dict) else {}
+    if not isinstance(policy_info, dict):
+        policy_info = {}
+    policy_id = str(policy_info.get("id", "advisory-v1"))
+    policy_version = str(policy_info.get("version", "1.0"))
     personas = []
     for persona in state.personas:
         entry = dict(persona)
@@ -199,6 +204,7 @@ def build_report(
         },
         "target": state.target.to_dict(),
         "intent": state.intent,
+        "policy": {"id": policy_id, "version": policy_version},
         "decision": decision,
         "confidence": state.confidence.to_dict(),
         "findings": [finding.to_dict() for finding in findings],

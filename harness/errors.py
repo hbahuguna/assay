@@ -33,3 +33,7 @@ class CheckError(HarnessError):
 
 class PluginError(CheckError):
     pass
+
+
+class PolicyError(HarnessError):
+    pass

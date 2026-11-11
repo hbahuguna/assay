@@ -48,6 +48,10 @@ python -m harness personas scaffold reliability --personas-dir personas
 # Run labeled confidence calibration fixtures.
 python -m harness calibrate --fixtures-dir calibration/fixtures
 
+# Use a versioned policy file for gates and weights.
+python -m harness run --target examples/sample-repo --no-browser \
+  --policy policies/advisory-v1.json --root .harness-demo
+
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
 python -m harness report --root .harness-demo
