@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from .errors import HarnessError
 from .models import Check, CheckStatus, Risk, Target, utc_now
-from .personas import Persona
+from .personas import Persona, check_ownership, ownership_error_message
 
 
 @dataclass(frozen=True)
@@ -15,12 +15,14 @@ class CheckDefinition:
     id: str
     title: str
     domain: str
-    persona: str
-    kind: str  # static | browser
+    kind: str  # static | browser | plugin
     intent: str
     expected: str
     base_weight: float
     requires: str  # source | url | markup | manifest | any
+    # Legacy plugin metadata only. Built-in ownership comes from persona
+    # frontmatter and this field is never used to plan a check.
+    persona: str = ""
 
 
 CHECK_CATALOG: List[CheckDefinition] = [
@@ -28,7 +30,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.inventory",
         title="Source and test inventory is complete and readable",
         domain="functional",
-        persona="functional",
         kind="static",
         intent="Know what the release contains before judging it.",
         expected="A readable source tree with an inventory of languages, manifests, tests, and CI.",
@@ -39,7 +40,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.secrets",
         title="No live credentials or private keys are committed",
         domain="security",
-        persona="security",
         kind="static",
         intent="Prevent a release from exposing credentials that grant access beyond the product.",
         expected="No private keys, provider tokens, or high-entropy credentials in tracked source.",
@@ -50,7 +50,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.unsafe",
         title="High-risk code patterns are absent or justified",
         domain="security",
-        persona="security",
         kind="static",
         intent="Reduce remotely triggerable command execution, injection, and transport failures.",
         expected="No unjustified eval, shell execution, unsafe HTML injection, SQL concatenation, or TLS bypass.",
@@ -61,7 +60,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.tests",
         title="The release has an automated test signal",
         domain="functional",
-        persona="functional",
         kind="static",
         intent="Ensure change safety does not depend entirely on manual exploration.",
         expected="At least one automated test file and a discoverable test framework or documented test command.",
@@ -72,7 +70,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.ci",
         title="Continuous integration runs the test signal",
         domain="reliability",
-        persona="functional",
         kind="static",
         intent="Keep evidence fresh on every change instead of relying on one local run.",
         expected="A CI configuration that runs tests or the harness on pull requests.",
@@ -83,7 +80,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.dependencies",
         title="Dependencies and environment files are locked and clean",
         domain="data_integrity",
-        persona="functional",
         kind="static",
         intent="Prevent unrepeatable builds and accidental environment disclosure.",
         expected="A lockfile for each package ecosystem and no committed local environment file.",
@@ -94,7 +90,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="static.accessibility",
         title="Source markup avoids obvious accessibility barriers",
         domain="accessibility",
-        persona="accessibility",
         kind="static",
         intent="Catch barriers before a browser run, especially missing text alternatives and labels.",
         expected="Images have alt text, interactive elements are semantic, and document language is declared.",
@@ -105,7 +100,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.load",
         title="The live target loads with a meaningful response",
         domain="functional",
-        persona="functional",
         kind="browser",
         intent="Establish that a real customer can reach a rendered product surface.",
         expected="A 2xx/3xx response, a non-empty title, and visible body content.",
@@ -116,7 +110,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.console",
         title="The rendered page has no unhandled console errors",
         domain="reliability",
-        persona="functional",
         kind="browser",
         intent="Detect runtime failures that may be invisible to a happy-path screenshot.",
         expected="No page errors and no error-level console messages during load.",
@@ -127,7 +120,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.network",
         title="Critical network requests succeed",
         domain="reliability",
-        persona="functional",
         kind="browser",
         intent="Find failed APIs and missing assets that break a customer journey.",
         expected="No failed requests and no unexpected 4xx/5xx responses during load.",
@@ -138,7 +130,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.security",
         title="Transport, headers, cookies, and forms use safe defaults",
         domain="security",
-        persona="security",
         kind="browser",
         intent="Reduce session theft, mixed-content injection, and clickjacking exposure.",
         expected="HTTPS, baseline security headers, secure cookies, and no insecure form targets.",
@@ -149,7 +140,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.accessibility",
         title="Rendered controls expose usable names and structure",
         domain="accessibility",
-        persona="accessibility",
         kind="browser",
         intent="Ensure keyboard and assistive-technology users can identify and operate the page.",
         expected="Images have alternatives, form controls have labels, controls have accessible names, and IDs are unique.",
@@ -160,7 +150,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.content",
         title="The page has a clear title and heading structure",
         domain="content",
-        persona="functional",
         kind="browser",
         intent="Give customers and search systems a coherent page identity.",
         expected="One primary heading and a concise, descriptive page title.",
@@ -171,7 +160,6 @@ CHECK_CATALOG: List[CheckDefinition] = [
         id="browser.links",
         title="Rendered links are safe and actionable",
         domain="functional",
-        persona="functional",
         kind="browser",
         intent="Avoid dead ends, insecure destinations, and tabnabbing exposure.",
         expected="No empty or javascript: links, no insecure destinations on HTTPS pages, and noopener on new tabs.",
@@ -209,24 +197,65 @@ def plan_checks(
     max_checks: int,
     no_browser: bool = False,
     registry: Optional[Any] = None,
+    all_personas: Optional[Iterable[Persona]] = None,
 ) -> List[Check]:
-    selected = {persona.id for persona in personas}
+    """Build the planned checks for the selected personas.
+
+    ``all_personas`` supplies the complete ownership map when ``personas`` is
+    only the selected subset. Without it, ownership is resolved from
+    ``personas``. Built-in checks with zero or multiple owners fail planning;
+    plugin ownership failures become blocked coverage gaps.
+    """
+
+    selected_personas = list(personas)
+    selected = {persona.id for persona in selected_personas}
+    owner_personas = (
+        list(all_personas) if all_personas is not None else selected_personas
+    )
+    ownership = check_ownership(owner_personas)
     definitions = registry.definitions if registry is not None else CHECK_CATALOG
+
+    def placeholder_owner(owners: List[str], check_id: str) -> str:
+        hint = registry.owner_hint(check_id) if registry is not None else ""
+        if hint:
+            return hint
+        for owner in owners:
+            if owner in selected:
+                return owner
+        if owners:
+            return owners[0]
+        if selected:
+            return sorted(selected)[0]
+        return "unassigned"
+
     checks: List[Check] = []
     for definition in definitions:
-        if definition.persona not in selected:
-            continue
-        if not _applicable(definition, inventory, target, no_browser):
-            continue
+        owners = ownership.get(definition.id, [])
+        source = registry.source(definition.id) if registry is not None else "builtin"
+        is_plugin = source.startswith("plugin")
         blocked_reason = (
             registry.blocked_reason(definition.id) if registry is not None else ""
         )
+        if len(owners) == 1:
+            owner = owners[0]
+        elif not is_plugin:
+            raise HarnessError(ownership_error_message(definition.id, owners))
+        else:
+            if registry is not None and not blocked_reason:
+                ownership_reason = ownership_error_message(definition.id, owners)
+                registry.block(definition.id, ownership_reason)
+                blocked_reason = ownership_reason
+            owner = placeholder_owner(owners, definition.id)
+        if owner not in selected:
+            continue
+        if not _applicable(definition, inventory, target, no_browser):
+            continue
         checks.append(
             Check(
                 id=definition.id,
                 title=definition.title,
                 domain=definition.domain,
-                persona=definition.persona,
+                persona=owner,
                 kind=definition.kind,
                 intent=definition.intent,
                 expected=definition.expected,

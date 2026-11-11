@@ -25,10 +25,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .checks import CHECK_CATALOG, CheckDefinition
-from .errors import PluginError
+from .errors import PersonaError, PluginError
 from .evidence import EvidenceStore
 from .models import Check, CheckStatus, Target
 from .outcomes import CheckOutcome, FindingDraft
+from .personas import Persona, check_ownership, ownership_error_message
 from .static_analysis import Inventory
 
 ENTRY_POINT_GROUP = "quality_harness.checks"
@@ -216,6 +217,8 @@ def signature_payload(definition: CheckDefinition, entry_point: str) -> bytes:
         "id": definition.id,
         "title": definition.title,
         "domain": definition.domain,
+        # Legacy metadata retained in the v1 signature so existing signed
+        # plugins keep verifying; ownership itself comes from personas.
         "persona": definition.persona,
         "kind": definition.kind,
         "intent": definition.intent,
@@ -302,6 +305,7 @@ class CheckRegistry:
         self._evaluators: Dict[str, Callable[[PluginContext], CheckOutcome]] = {}
         self._sources: Dict[str, str] = {}
         self._blocked: Dict[str, str] = {}
+        self._owner_hints: Dict[str, str] = {}
 
     @property
     def definitions(self) -> List[CheckDefinition]:
@@ -321,6 +325,19 @@ class CheckRegistry:
 
     def blocked_reason(self, check_id: str) -> str:
         return self._blocked.get(check_id, "")
+
+    def owner_hint(self, check_id: str) -> str:
+        """Return the persona hint used to place a blocked check in a plan."""
+
+        return self._owner_hints.get(check_id, "")
+
+    def block(self, check_id: str, reason: str) -> None:
+        """Mark a registered check blocked without changing its identity."""
+
+        if check_id not in self._definitions or check_id in self._blocked:
+            return
+        self._blocked[check_id] = reason
+        self.log_fn("WARNING: check '{}' blocked: {}".format(check_id, reason))
 
     def builtin_count(self) -> int:
         return sum(
@@ -426,11 +443,22 @@ class CheckRegistry:
                 self._definitions[definition.id] = definition
                 self._sources[definition.id] = "plugin-blocked"
                 self._blocked[definition.id] = reason
+                self._owner_hints[definition.id] = definition.persona or "functional"
                 self.log_fn("WARNING: plugin check '{}' blocked: {}".format(definition.id, reason))
                 return
-        self.block_failure(label, reason, persona=definition.persona if definition else "functional")
+        self.block_failure(
+            label,
+            reason,
+            owner_hint=(
+                definition.persona
+                if definition and definition.persona
+                else "functional"
+            ),
+        )
 
-    def block_failure(self, label: str, reason: str, persona: str = "functional") -> str:
+    def block_failure(
+        self, label: str, reason: str, owner_hint: str = "functional"
+    ) -> str:
         base = "plugin.load.{}".format(_slug(label))
         check_id = base
         suffix = 2
@@ -441,7 +469,6 @@ class CheckRegistry:
             id=check_id,
             title="Plugin '{}' could not be loaded".format(label),
             domain="functional",
-            persona=persona,
             kind="plugin",
             intent="Keep a plugin configuration failure visible as a coverage gap.",
             expected="The plugin loads, validates, and is owned by exactly one persona.",
@@ -451,6 +478,7 @@ class CheckRegistry:
         self._definitions[check_id] = definition
         self._sources[check_id] = "plugin-blocked"
         self._blocked[check_id] = reason
+        self._owner_hints[check_id] = owner_hint or "functional"
         self.log_fn("WARNING: plugin '{}' blocked: {}".format(label, reason))
         return check_id
 
@@ -470,7 +498,6 @@ class CheckRegistry:
             id=check_id,
             title="Plugin check '{}' could not be loaded".format(check_id),
             domain=domain or "functional",
-            persona=persona_id,
             kind="plugin",
             intent="Keep a plugin load failure visible as a coverage gap.",
             expected="The plugin loads, validates, signs, and is owned by exactly one persona.",
@@ -480,30 +507,33 @@ class CheckRegistry:
         self._definitions[check_id] = definition
         self._sources[check_id] = "plugin-blocked"
         self._blocked[check_id] = reason
+        self._owner_hints[check_id] = persona_id
         self.log_fn("WARNING: plugin check '{}' blocked: {}".format(check_id, reason))
 
-    def validate_ownership(
-        self, personas: Iterable[Any], selected_only: bool = False
-    ) -> None:
+    def validate_ownership(self, personas: Iterable[Persona]) -> None:
+        """Resolve every check to exactly one persona owner.
+
+        Built-in checks are a configuration contract: an unowned or multiply
+        owned check fails validation before execution. Plugin ownership
+        failures are coverage gaps and become blocked checks instead.
+        """
+
         persona_list = list(personas)
-        selected = {persona.id for persona in persona_list}
-        for check_id, definition in list(self._definitions.items()):
+        ownership = check_ownership(persona_list)
+        for check_id in list(self._definitions):
+            owners = ownership.get(check_id, [])
+            source = self._sources.get(check_id, "")
+            is_plugin = source.startswith("plugin")
+            if len(owners) == 1:
+                if check_id in self._blocked and not self._owner_hints.get(check_id):
+                    self._owner_hints[check_id] = owners[0]
+                continue
+            reason = ownership_error_message(check_id, owners)
+            if not is_plugin:
+                raise PersonaError(reason)
             if check_id in self._blocked:
                 continue
-            if selected_only and definition.persona not in selected:
-                continue
-            owners = [persona.id for persona in persona_list if check_id in persona.checks]
-            if owners != [definition.persona]:
-                reason = (
-                    "Check '{}' must be listed by exactly its declared persona '{}'; "
-                    "found owners: {}.".format(
-                        check_id,
-                        definition.persona,
-                        ", ".join(owners) if owners else "none",
-                    )
-                )
-                self._blocked[check_id] = reason
-                self.log_fn("WARNING: check '{}' blocked: {}".format(check_id, reason))
+            self.block(check_id, reason)
 
     def _validate_definition(self, definition: CheckDefinition) -> None:
         if not isinstance(definition, CheckDefinition):
@@ -517,8 +547,6 @@ class CheckRegistry:
             raise PluginError("Check '{}' needs a non-empty title.".format(definition.id))
         if not definition.domain.strip():
             raise PluginError("Check '{}' needs a non-empty domain.".format(definition.id))
-        if not definition.persona.strip():
-            raise PluginError("Check '{}' needs a non-empty persona.".format(definition.id))
         if definition.kind not in {"static", "browser", "plugin"}:
             raise PluginError(
                 "Check '{}' has unknown kind '{}'; use static, browser, or plugin.".format(

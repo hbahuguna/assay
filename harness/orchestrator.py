@@ -47,6 +47,7 @@ from .outcomes import CheckOutcome
 from .personas import (
     Persona,
     load_personas,
+    select_personas,
     unknown_persona_check_ids,
     validate_payload,
     validate_persona_checks,
@@ -92,6 +93,7 @@ class Orchestrator:
         self.state: Optional[RunState] = None
         self.evidence: Optional[EvidenceStore] = None
         self.personas: List[Persona] = []
+        self.all_personas: List[Persona] = []
         self.persona_map: Dict[str, Persona] = {}
         self.registry: Optional[CheckRegistry] = None
         self.workflow: Optional[Workflow] = None
@@ -229,19 +231,18 @@ class Orchestrator:
             cwd_candidate = Path.cwd() / personas_dir
             root_candidate = self.root / personas_dir
             personas_dir = cwd_candidate if cwd_candidate.is_dir() else root_candidate
-        self.personas = load_personas(
+        all_personas = load_personas(
             personas_dir,
-            selected=self.options.selected_personas or None,
             require_minimum=self.options.require_personas,
         )
-        unknown = unknown_persona_check_ids(self.personas, self.registry.ids())
+        unknown = unknown_persona_check_ids(all_personas, self.registry.ids())
         if unknown and self.registry.has_plugin_failures():
-            persona_map = {persona.id: persona for persona in self.personas}
+            all_persona_map = {persona.id: persona for persona in all_personas}
             owners: Dict[str, List[str]] = {}
             for persona_id, check_id in unknown:
                 owners.setdefault(check_id, []).append(persona_id)
             for check_id, persona_ids in sorted(owners.items()):
-                persona = persona_map.get(persona_ids[0])
+                persona = all_persona_map.get(persona_ids[0])
                 domain = persona.domains[0] if persona and persona.domains else "functional"
                 self.registry.block_missing_plugin_check(
                     check_id,
@@ -252,9 +253,11 @@ class Orchestrator:
                         check_id, ", ".join(persona_ids)
                     ),
                 )
-        validate_persona_checks(self.personas, self.registry.ids())
-        self.registry.validate_ownership(
-            self.personas, selected_only=bool(self.options.selected_personas)
+        validate_persona_checks(all_personas, self.registry.ids())
+        self.registry.validate_ownership(all_personas)
+        self.all_personas = all_personas
+        self.personas = select_personas(
+            all_personas, self.options.selected_personas or None
         )
         self.persona_map = {persona.id: persona for persona in self.personas}
         self.log(
@@ -484,6 +487,7 @@ class Orchestrator:
             self.options.max_checks,
             self.options.no_browser,
             registry=self.registry,
+            all_personas=self.all_personas,
         )
         apply_risk_weights(checks, self.state.risks)
         self.state.checks = checks

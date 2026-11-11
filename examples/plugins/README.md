@@ -9,9 +9,12 @@ check; it is never executed.
 - Entry-point group: `quality_harness.checks`
 - Entry point value: `sample_check:PLUGIN`
 - `PLUGIN` is a `harness.plugins.CheckPlugin`
-- The definition declares `id`, `kind`, `requires`, `base_weight`, `persona`,
-  and the evidence/reporting contract
-- The plugin check id must be listed by exactly one persona in its frontmatter
+- The definition declares `id`, `kind`, `requires`, `base_weight`, and the
+  evidence/reporting contract
+- The plugin check id must be listed by exactly one persona in its frontmatter;
+  persona ownership, not the definition, decides which plan runs the check
+- The legacy `persona` field is optional metadata only and is ignored for
+  ownership
 
 `pyproject.toml` is the installable shape. Copy this folder out of the source tree
 or install it directly with `pip install ./examples/plugins` before signing.

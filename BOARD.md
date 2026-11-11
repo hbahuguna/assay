@@ -30,12 +30,12 @@ passes.
 
 **Derivation:** Session 1 verified that the OSS harness can run statically,
 persist state, hash evidence, halt on a critical finding, and degrade safely
-when Playwright is absent. The gaps that shape this board are: check logic is
-still hard-coded, persona ownership is duplicated in code, confidence weights
-are uncalibrated, there is no run history or trend diff, the browser layer is
-untested in CI, and there is no tenant, metering, quota, licensing, or billing
-surface. The cloud epic exists because the business goal is a self-serve,
-usage-based tier, not a bespoke enterprise deployment.
+when Playwright is absent. The gaps that shape this board are: much of the check
+logic is still hard-coded, confidence weights are uncalibrated, there is no run
+history or trend diff, the browser layer is untested in CI, and there is no
+tenant, metering, quota, licensing, or billing surface. The cloud epic exists
+because the business goal is a self-serve, usage-based tier, not a bespoke
+enterprise deployment.
 
 ## Backlog
 
@@ -137,22 +137,6 @@ into a false release signal.
 | S7.4 | State, evidence, and the kill switch survive injected failures | QH-034 |
 
 ## Ready
-
-### QH-006 - Move check ownership into persona contracts
-
-- **Epic:** E2 Specialist Persona Layer
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-003
-- **Status:** Ready
-- **Description:** Derive each check's owning persona from persona frontmatter
-  instead of the duplicated `persona` field in `CHECK_CATALOG`. Reject any check
-  claimed by zero or multiple personas.
-- **Acceptance Criteria:**
-  - Removing a check from every persona makes planning fail with a precise error.
-  - Duplicate ownership fails validation before execution starts.
-  - The catalog has no `persona` assignment that can drift from the contracts.
-  - Existing persona and planning tests continue to pass.
 
 ### QH-007 - Quarantine schema-invalid findings
 
@@ -668,7 +652,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-005` are complete, so `QH-006` is now
+No task is claimed. `QH-001` through `QH-006` are complete, so `QH-007` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task, and `QH-010` can proceed in parallel because it has
 no dependency.
@@ -808,6 +792,32 @@ no dependency.
   CLI wiring for `status --all`, `run --keep-runs`, and `prune`. Full suite: 74
   passing tests with Python 3.11. Behavior documented in `README.md`.
 
+### QH-006 - Move check ownership into persona contracts
+
+- **Epic:** E2 Specialist Persona Layer
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-003
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Made persona frontmatter the single source of truth for check
+  ownership. The built-in catalog no longer assigns a `persona`; planning and
+  registry validation derive the owner from the contracts. Built-in checks with
+  zero or multiple owners fail before execution, while plugin ownership failures
+  remain blocked coverage gaps per D13.
+- **Acceptance Criteria:**
+  - Removing a check from every persona makes planning fail with a precise error.
+  - Duplicate ownership fails validation before execution starts.
+  - The catalog has no `persona` assignment that can drift from the contracts.
+  - Existing persona and planning tests continue to pass.
+- **Evidence:** `tests/test_ownership.py` proves the catalog has no persona
+  assignments, an unowned built-in check fails `plan_checks` with the check id,
+  the orchestrator raises `PersonaError` before creating run state, duplicate
+  ownership is rejected before execution, selected-persona plans use the full
+  contract set for ownership, and planned owners come from frontmatter. Full
+  suite: 80 passing tests with Python 3.11. `README.md`, `personas/README.md`,
+  and `examples/plugins/README.md` document the ownership contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -847,3 +857,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D13 | 2026-11-10 | Built-in and installed checks share a registry; plugins use signed `quality_harness.checks` entry points and a project-local HMAC trust store. | The dependency-free core cannot bundle a public-key library, while symmetric signatures still let an operator pin trusted plugin publishers. Load, signature, and ownership failures are blocked coverage gaps rather than run failures. | Replace HMAC with a public-key scheme when an optional plugin-signing extra or package verifier exists. |
 | D14 | 2026-11-10 | Clock and entropy are context-scoped providers; seeded runs use SHA-256 based id generation and an optional frozen clock. | Existing `utc_now`/`new_id` call sites stay intact, production defaults remain real UTC and UUID entropy, and seeded runs can reproduce report bytes without patching every module. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent determinism. |
 | D15 | 2026-11-11 | `.harness/history.json` is the run index; pruning writes the retained index before deleting evidence and always protects the latest run, latest completed run, and halted runs. | A crash during pruning must not leave history claiming deleted evidence, and operators need a stable latest run plus halted runs for incident review. | Move to per-run state snapshots if pruning must also remove non-latest progress state transactionally. |
+| D16 | 2026-11-11 | Persona frontmatter is the only source of check ownership. The catalog's `persona` field is legacy plugin metadata and never drives planning. Built-in zero/multiple ownership is a fatal configuration error; plugin ownership failures are blocked coverage gaps. | A duplicated assignment can drift silently. Deriving owners from the contracts makes disjoint ownership machine-checkable, while preserving D13 for optional plugins. | Remove the legacy field after external plugins have migrated or a plugin schema v2 is published. |

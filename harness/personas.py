@@ -231,6 +231,57 @@ def load_personas(
     return personas
 
 
+def select_personas(
+    personas: Iterable[Persona], selected: Optional[Iterable[str]] = None
+) -> List[Persona]:
+    """Return the requested persona subset, preserving contract order."""
+
+    persona_list = list(personas)
+    if not selected:
+        return persona_list
+    wanted = [item.strip() for item in selected if item.strip()]
+    if not wanted:
+        return persona_list
+    available = {persona.id for persona in persona_list}
+    missing = [item for item in wanted if item not in available]
+    if missing:
+        raise PersonaError(
+            "Unknown persona id(s): {}. Available: {}".format(
+                ", ".join(missing), ", ".join(sorted(available))
+            )
+        )
+    wanted_set = set(wanted)
+    return [persona for persona in persona_list if persona.id in wanted_set]
+
+
+def check_ownership(personas: Iterable[Persona]) -> Dict[str, List[str]]:
+    """Map every declared check id to the persona ids that claim it."""
+
+    owners: Dict[str, List[str]] = {}
+    for persona in personas:
+        for check_id in persona.checks:
+            owners.setdefault(check_id, []).append(persona.id)
+    return {
+        check_id: sorted(persona_ids)
+        for check_id, persona_ids in owners.items()
+    }
+
+
+def ownership_error_message(check_id: str, owners: Iterable[str]) -> str:
+    """Return a precise, deterministic ownership configuration error."""
+
+    owner_list = sorted(owners)
+    if not owner_list:
+        return (
+            "Check '{}' has no declared persona owner; it must be listed by "
+            "exactly one persona contract.".format(check_id)
+        )
+    return (
+        "Check '{}' is claimed by multiple personas ({}); it must be listed "
+        "by exactly one persona contract.".format(check_id, ", ".join(owner_list))
+    )
+
+
 def _type_matches(value: Any, expected: str) -> bool:
     if expected == "object":
         return isinstance(value, dict)

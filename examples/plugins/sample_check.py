@@ -17,7 +17,6 @@ DEFINITION = CheckDefinition(
     id="example.package_metadata",
     title="The project declares package metadata",
     domain="data_integrity",
-    persona="functional",
     kind="plugin",
     intent="Confirm the release has a machine-readable package identity.",
     expected="At least one package manifest is present in the source inventory.",

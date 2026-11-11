@@ -110,9 +110,10 @@ kill switch cannot be resumed; start a new run after investigating.
 Built-in checks and installed plugins are discovered through the same
 `CheckRegistry`. A plugin package exposes a `CheckPlugin` from the
 `quality_harness.checks` entry-point group. Its definition declares the check
-id, kind, required input, base weight, owning persona, intent, and expected
-outcome; its evaluator receives a `PluginContext` with the target inventory and
-the run's evidence store.
+id, kind, required input, base weight, intent, and expected outcome; its
+evaluator receives a `PluginContext` with the target inventory and the run's
+evidence store. Check ownership is not part of the definition: it is derived
+from the persona contracts, which are the single source of truth.
 
 Plugins are signed with HMAC-SHA256 over the canonical definition and entry-point
 value. The trust store stays outside source control:
@@ -129,11 +130,15 @@ Write it to `.harness/plugins/trusted_keys.json` with mode `0600`, sign the entr
 point with `harness.plugins.sign_plugin`, and put the returned
 `hmac-sha256:<key_id>:<digest>` value in `CheckPlugin.signature`.
 
-A plugin check must be listed by exactly its declared persona. Duplicate ids,
-unknown input requirements, zero weights, unsigned packages, import failures,
-and ownership mismatches are rejected as blocked checks with the limitation
-recorded; the rest of the run continues. Browser plugin kinds are not supported
-yet. See `examples/plugins/README.md` and `examples/plugins/sample_check.py`.
+A plugin check must be listed by exactly one persona in its frontmatter. The
+persona contract, not the check definition, owns it. Duplicate ids, unknown
+input requirements, zero weights, unsigned packages, import failures, and
+ownership failures are rejected as blocked checks with the limitation recorded;
+the rest of the run continues. An unowned or multiply owned built-in check is a
+configuration error: duplicate ownership is rejected before execution, and
+planning fails with the offending check id. Browser plugin kinds are not
+supported yet. See `examples/plugins/README.md` and
+`examples/plugins/sample_check.py`.
 
 ### Reproducible runs
 
@@ -291,7 +296,10 @@ or the report.
 | `accessibility` | Source markup heuristics and rendered accessibility signals |
 
 Each file declares YAML frontmatter, role, available tools, a JSON output
-schema, and refusal handling. See `personas/README.md`.
+schema, and refusal handling. Check ownership is derived from the frontmatter
+`checks` lists. Every built-in check must be listed by exactly one persona; an
+unowned check fails planning and duplicate ownership is rejected before
+execution. See `personas/README.md`.
 
 ## Repository layout
 

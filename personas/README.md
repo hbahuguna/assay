@@ -16,8 +16,9 @@ and when it must refuse.
 5. A `## Refusal handling` section that lists concrete refusal conditions and
    requires a structured blocker instead of a pass.
 
-Every check ID in frontmatter must exist in `harness/checks.py`. Validate the
-whole directory with:
+Every built-in check ID in frontmatter must exist in `harness/checks.py`; a
+plugin check ID is resolved through the signed `CheckRegistry` instead. Validate
+the whole directory with:
 
 ```bash
 python -m harness personas --personas-dir personas
@@ -25,7 +26,12 @@ python -m harness personas --personas-dir personas
 
 ## Rules
 
+- Ownership lives here, not in the check catalog. Every built-in check must be
+  listed by exactly one persona. An unowned check fails planning; duplicate
+  ownership is a configuration error rejected before execution.
 - One persona owns one check. Do not duplicate a check across personas.
+- A plugin check must also be listed by exactly one persona. An unowned or
+  multiply owned plugin becomes a blocked coverage gap, never a pass.
 - A persona must never convert a blocked or refused check into a passing score.
 - Tools are capabilities, not suggestions. If a tool is not listed, the persona
   may not use it.
