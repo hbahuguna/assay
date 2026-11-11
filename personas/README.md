@@ -32,6 +32,10 @@ python -m harness personas --personas-dir personas
 - One persona owns one check. Do not duplicate a check across personas.
 - A plugin check must also be listed by exactly one persona. An unowned or
   multiply owned plugin becomes a blocked coverage gap, never a pass.
+- A finding that does not satisfy its persona's output schema is quarantined in
+  `invalid_findings` with a redacted payload. It cannot affect scoring or trigger
+  the kill switch, and three consecutive invalid findings mark the persona as
+  degraded in the report.
 - A persona must never convert a blocked or refused check into a passing score.
 - Tools are capabilities, not suggestions. If a tool is not listed, the persona
   may not use it.

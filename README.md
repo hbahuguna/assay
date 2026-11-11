@@ -216,10 +216,16 @@ the run continues with source evidence.
   formula breakdown, and gate reasons.
 - `findings`: severity, consequence, location, reproduction, evidence,
   remediation, verification, fingerprint, and owning persona.
+- `invalid_findings`: quarantined findings with the owning persona, check id,
+  validation errors, and a redacted payload. They never affect scoring, finding
+  counts, or kill-switch evaluation.
+- `contract_failures`: per-persona schema-failure counts and the list of
+  personas marked degraded after three consecutive invalid findings.
 - `checks`: planned checks, status, weight, actual result, intent, and evidence.
 - `coverage`: executed, blocked, skipped, errored, and planned-not-run counts.
 - `phases`, `risks`, `personas`, `inventory`, kill-switch state, and evidence
-  summary.
+  summary. Each persona entry includes its contract-failure count, current
+  streak, and `degraded` flag.
 
 Example shape:
 
@@ -300,6 +306,13 @@ schema, and refusal handling. Check ownership is derived from the frontmatter
 `checks` lists. Every built-in check must be listed by exactly one persona; an
 unowned check fails planning and duplicate ownership is rejected before
 execution. See `personas/README.md`.
+
+A finding that violates its owner's output schema is quarantined before it can
+enter state as a normal finding. The report keeps the persona, check id,
+validation errors, and a redacted payload under `invalid_findings`. Quarantined
+findings are excluded from confidence penalties and kill-switch evaluation, but
+the failure is counted under `contract_failures`; three consecutive invalid
+findings from one persona mark that persona `degraded`.
 
 ## Repository layout
 

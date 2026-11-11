@@ -80,6 +80,23 @@ def build_report(
         state.findings,
         key=lambda item: (-severity_rank(item.severity), item.created_at, item.id),
     )
+    invalid_findings = sorted(
+        state.invalid_findings,
+        key=lambda item: (item.recorded_at, item.id),
+    )
+    contract_failures = {
+        persona: int(count) for persona, count in state.contract_failures.items()
+    }
+    personas = []
+    for persona in state.personas:
+        entry = dict(persona)
+        persona_id = str(entry.get("id", ""))
+        entry["contract_failures"] = contract_failures.get(persona_id, 0)
+        entry["contract_failure_streak"] = int(
+            state.contract_failure_streaks.get(persona_id, 0)
+        )
+        entry["degraded"] = persona_id in state.degraded_personas
+        personas.append(entry)
     checks = [
         {
             "id": check.id,
@@ -114,6 +131,22 @@ def build_report(
         note = "Security checks are bounded and non-destructive; they are not a penetration test or a certification."
         if note not in limitations:
             limitations.append(note)
+    if invalid_findings:
+        note = (
+            "{} finding(s) violated a persona output contract and were quarantined; "
+            "they are excluded from scoring and kill-switch evaluation.".format(
+                len(invalid_findings)
+            )
+        )
+        if note not in limitations:
+            limitations.append(note)
+    for persona in state.degraded_personas:
+        note = (
+            "Persona '{}' produced three consecutive schema-invalid findings and is "
+            "marked degraded.".format(persona)
+        )
+        if note not in limitations:
+            limitations.append(note)
 
     severity_counts = {severity.value: 0 for severity in Severity}
     for finding in findings:
@@ -141,10 +174,16 @@ def build_report(
         "confidence": state.confidence.to_dict(),
         "findings": [finding.to_dict() for finding in findings],
         "finding_counts": severity_counts,
+        "invalid_findings": [finding.to_dict() for finding in invalid_findings],
+        "contract_failures": {
+            "total": sum(contract_failures.values()),
+            "by_persona": contract_failures,
+            "degraded_personas": list(state.degraded_personas),
+        },
         "checks": checks,
         "coverage": _coverage(state),
         "risks": [risk.to_dict() for risk in state.risks],
-        "personas": state.personas,
+        "personas": personas,
         "inventory": state.inventory,
         "phases": [phase.to_dict() for phase in state.phases],
         "kill_switch": state.kill_switch.to_dict(),

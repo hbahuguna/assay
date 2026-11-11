@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-007 - Quarantine schema-invalid findings
-
-- **Epic:** E2 Specialist Persona Layer
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-006
-- **Status:** Ready
-- **Description:** A finding that violates its persona output schema must be
-  quarantined: visible in an `invalid_findings` report section, excluded from
-  scoring and the kill switch, and counted as a contract failure.
-- **Acceptance Criteria:**
-  - Invalid findings never change the confidence score or trigger a kill.
-  - The report shows the persona, check, validation errors, and redacted payload.
-  - Three consecutive invalid findings mark the persona as degraded in the report.
-  - Tests cover missing fields, wrong enum values, and wrong nested types.
-
 ### QH-008 - Add structured refusal and blocker records
 
 - **Epic:** E2 Specialist Persona Layer
@@ -652,7 +636,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-006` are complete, so `QH-007` is now
+No task is claimed. `QH-001` through `QH-007` are complete, so `QH-008` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task, and `QH-010` can proceed in parallel because it has
 no dependency.
@@ -818,6 +802,36 @@ no dependency.
   suite: 80 passing tests with Python 3.11. `README.md`, `personas/README.md`,
   and `examples/plugins/README.md` document the ownership contract.
 
+### QH-007 - Quarantine schema-invalid findings
+
+- **Epic:** E2 Specialist Persona Layer
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-006
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Findings are validated against the owning persona's output
+  schema before normalization. Invalid drafts are quarantined in a persisted
+  `invalid_findings` collection with redacted payloads and validation errors;
+  they never enter `findings`, scoring, finding counts, or kill-switch
+  evaluation. Per-persona contract failures and consecutive-failure streaks are
+  tracked, and three consecutive failures mark the persona as degraded.
+- **Acceptance Criteria:**
+  - Invalid findings never change the confidence score or trigger a kill.
+  - The report shows the persona, check, validation errors, and redacted payload.
+  - Three consecutive invalid findings mark the persona as degraded in the report.
+  - Tests cover missing fields, wrong enum values, and wrong nested types.
+- **Evidence:** `tests/test_invalid_findings.py` runs a signed plugin that emits
+  a missing required field, an out-of-contract severity, and a wrong nested
+  `tags` type. It proves the confidence score matches a control run with no
+  malformed findings, the kill switch does not fire, no plugin finding reaches
+  `findings` or `finding_ids`, all three errors appear with the persona, check,
+  and redacted payload, a live-looking token never reaches progress, report, or
+  evidence, three consecutive failures degrade the persona, and a valid finding
+  resets the consecutive-failure streak. Full suite: 83 passing tests with
+  Python 3.11. The report contract and persona rules are documented in
+  `README.md` and `personas/README.md`.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -858,3 +872,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D14 | 2026-11-10 | Clock and entropy are context-scoped providers; seeded runs use SHA-256 based id generation and an optional frozen clock. | Existing `utc_now`/`new_id` call sites stay intact, production defaults remain real UTC and UUID entropy, and seeded runs can reproduce report bytes without patching every module. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent determinism. |
 | D15 | 2026-11-11 | `.harness/history.json` is the run index; pruning writes the retained index before deleting evidence and always protects the latest run, latest completed run, and halted runs. | A crash during pruning must not leave history claiming deleted evidence, and operators need a stable latest run plus halted runs for incident review. | Move to per-run state snapshots if pruning must also remove non-latest progress state transactionally. |
 | D16 | 2026-11-11 | Persona frontmatter is the only source of check ownership. The catalog's `persona` field is legacy plugin metadata and never drives planning. Built-in zero/multiple ownership is a fatal configuration error; plugin ownership failures are blocked coverage gaps. | A duplicated assignment can drift silently. Deriving owners from the contracts makes disjoint ownership machine-checkable, while preserving D13 for optional plugins. | Remove the legacy field after external plugins have migrated or a plugin schema v2 is published. |
+| D17 | 2026-11-11 | Findings are validated against the owning persona schema before normalization. Invalid drafts persist only as redacted `invalid_findings` records, never in scoring, finding counts, or kill-switch evaluation. Three consecutive invalid findings degrade the persona; a valid finding resets the streak. | Normalization can otherwise turn a malformed finding into an apparently valid one. Quarantining preserves the audit trail while preventing contract failures from inflating or deflating release confidence. | Add per-check contract-failure budgets or automatic remediation hints if specialist output quality becomes a recurring gap. |

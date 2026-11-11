@@ -10,13 +10,15 @@ and browser.py so this module stays readable.
 from __future__ import annotations
 
 import hashlib
+import re
 import sys
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
-from .browser import BrowserCheckRunner, BrowserOptions
+from .browser import BrowserCheckRunner, BrowserOptions, redact_text
 from .checks import apply_risk_weights, plan_checks
 from .determinism import (
     Determinism,
@@ -31,6 +33,7 @@ from .models import (
     Check,
     CheckStatus,
     Finding,
+    InvalidFinding,
     KillSwitch,
     Phase,
     PhaseName,
@@ -58,6 +61,65 @@ from .risk import RiskAnalyzer
 from .scoring import score_confidence
 from .static_analysis import Inventory, SourceInspector, StaticCheckRunner
 from .workflows import Workflow, get_workflow
+
+
+_SENSITIVE_KEY = re.compile(
+    r"(?i)(authorization|cookie|credential|password|passwd|private[_-]?key|"
+    r"secret|session|token|api[_-]?key)"
+)
+_PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
+
+
+def _redact_string(value: str) -> str:
+    text = _PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", str(value))
+    return redact_text(text)
+
+
+def _redact_payload(value: Any, key: str = "") -> Any:
+    """Recursively redact a payload before it can reach state or the report."""
+
+    if key and _SENSITIVE_KEY.search(key):
+        return "[REDACTED]"
+    if isinstance(value, Mapping):
+        return {
+            str(item_key): _redact_payload(item_value, str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_payload(item) for item in value]
+    if isinstance(value, str):
+        return _redact_string(value)
+    if isinstance(value, (bool, int, float)) or value is None:
+        return value
+    return _redact_string(repr(value))
+
+
+def _draft_payload(draft: Any) -> Dict[str, Any]:
+    """Return the raw finding payload without deriving missing fields."""
+
+    if isinstance(draft, Mapping):
+        return dict(draft)
+    if is_dataclass(draft) and not isinstance(draft, type):
+        payload = {}
+        for definition in fields(draft):
+            try:
+                payload[definition.name] = getattr(draft, definition.name)
+            except AttributeError:
+                # A malformed object is itself a contract violation; preserve
+                # the absence instead of crashing the run.
+                continue
+        return payload
+    to_dict = getattr(draft, "to_dict", None)
+    if callable(to_dict):
+        payload = to_dict()
+        if isinstance(payload, Mapping):
+            return dict(payload)
+    if hasattr(draft, "__dict__"):
+        return dict(vars(draft))
+    return {"value": draft}
 
 
 @dataclass
@@ -373,6 +435,12 @@ class Orchestrator:
                 if check.status in (CheckStatus.RUNNING.value, CheckStatus.PLANNED.value, CheckStatus.ERROR.value)
             }
             state.findings = [finding for finding in state.findings if finding.check_id not in rerun_ids]
+            remaining_invalid = [
+                finding for finding in state.invalid_findings if finding.check_id not in rerun_ids
+            ]
+            if len(remaining_invalid) != len(state.invalid_findings):
+                state.invalid_findings = remaining_invalid
+                self._rebuild_contract_state(state)
             for check in state.checks:
                 if check.id in rerun_ids:
                     check.status = CheckStatus.PLANNED.value
@@ -390,6 +458,24 @@ class Orchestrator:
         state.personas = [self._public_persona(persona) for persona in self.personas]
         self.state_store.save(state)
         self.log("Resuming run {} from the first incomplete phase.".format(state.run_id))
+
+    @staticmethod
+    def _rebuild_contract_state(state: RunState) -> None:
+        """Recompute contract-failure counters after a rerun removes records."""
+
+        failures: Dict[str, int] = {}
+        streaks: Dict[str, int] = {}
+        degraded: List[str] = []
+        for record in state.invalid_findings:
+            persona = record.persona
+            failures[persona] = failures.get(persona, 0) + 1
+            streak = streaks.get(persona, 0) + 1
+            streaks[persona] = streak
+            if streak >= 3 and persona not in degraded:
+                degraded.append(persona)
+        state.contract_failures = failures
+        state.contract_failure_streaks = streaks
+        state.degraded_personas = degraded
 
     @staticmethod
     def _public_persona(persona: Persona) -> Dict[str, Any]:
@@ -692,9 +778,21 @@ class Orchestrator:
             check.skip_reason = str(outcome.metadata.get("limitation") or outcome.actual)
         if outcome.status == CheckStatus.ERROR.value:
             self.log("WARNING: {} errored: {}".format(check.id, outcome.actual))
-        matched = None
+        recorded_findings: List[Finding] = []
+        invalid_count = 0
         for draft in outcome.findings:
-            finding = self._to_finding(draft, check)
+            payload = _draft_payload(draft)
+            persona = self.persona_map.get(check.persona)
+            errors = (
+                validate_payload(payload, persona.output_schema)
+                if persona is not None
+                else []
+            )
+            if errors:
+                self._quarantine_finding(check, payload, errors)
+                invalid_count += 1
+                continue
+            finding = self._to_finding(payload, check)
             existing = next(
                 (item for item in self.state.findings if item.fingerprint == finding.fingerprint), None
             )
@@ -704,13 +802,15 @@ class Orchestrator:
                         existing.evidence.append(path)
                 if existing.id not in check.finding_ids:
                     check.finding_ids.append(existing.id)
-                if matched is None:
-                    matched = existing
+                recorded_findings.append(existing)
+                self._record_valid_contract(check.persona)
                 continue
             self.state.findings.append(finding)
             check.finding_ids.append(finding.id)
-            if matched is None:
-                matched = finding
+            recorded_findings.append(finding)
+            self._record_valid_contract(check.persona)
+        if invalid_count:
+            check.metadata["invalid_findings"] = invalid_count
         self.state.touch()
         if self.evidence is not None:
             self.evidence.checkpoint()
@@ -721,57 +821,88 @@ class Orchestrator:
                 "event": "check_completed",
                 "check_id": check.id,
                 "status": check.status,
-                "findings": len(outcome.findings),
+                "findings": len(recorded_findings),
+                "invalid_findings": invalid_count,
             }
         )
         threshold = self.options.kill_on
         if threshold == "never":
             return False
         trigger_rank = severity_rank(threshold)
-        for draft in outcome.findings:
-            if severity_rank(draft.severity) >= trigger_rank:
-                finding_id = matched.id if matched is not None else ""
+        for finding in recorded_findings:
+            if severity_rank(finding.severity) >= trigger_rank:
                 self._trigger_kill(
-                    "Automatic kill switch: {} finding from check {}".format(draft.severity, check.id),
-                    finding_id=finding_id,
+                    "Automatic kill switch: {} finding from check {}".format(
+                        finding.severity, check.id
+                    ),
+                    finding_id=finding.id,
                 )
                 return True
         return False
 
-    def _to_finding(self, draft, check: Check) -> Finding:
+    def _quarantine_finding(
+        self, check: Check, payload: Dict[str, Any], errors: List[str]
+    ) -> InvalidFinding:
+        """Persist a contract-violating finding outside scoring and kill policy."""
+
+        assert self.state is not None
+        persona = check.persona
+        record = InvalidFinding(
+            id=new_id("invalid-finding"),
+            persona=persona,
+            check_id=check.id,
+            errors=[_redact_string(error) for error in errors],
+            payload=_redact_payload(payload),
+            recorded_at=utc_now(),
+        )
+        self.state.invalid_findings.append(record)
+        self.state.contract_failures[persona] = (
+            self.state.contract_failures.get(persona, 0) + 1
+        )
+        streak = self.state.contract_failure_streaks.get(persona, 0) + 1
+        self.state.contract_failure_streaks[persona] = streak
+        if streak >= 3 and persona not in self.state.degraded_personas:
+            self.state.degraded_personas.append(persona)
+        self.log(
+            "WARNING: quarantined invalid finding from {} check {} ({} validation error(s)); "
+            "first: {}".format(
+                persona, check.id, len(record.errors), record.errors[0] if record.errors else "unknown"
+            )
+        )
+        return record
+
+    def _record_valid_contract(self, persona: str) -> None:
+        assert self.state is not None
+        if persona and self.state.contract_failure_streaks.get(persona):
+            self.state.contract_failure_streaks[persona] = 0
+
+    def _to_finding(self, payload: Dict[str, Any], check: Check) -> Finding:
+        title = payload.get("title", "")
+        domain = payload.get("domain", "")
+        severity = payload.get("severity", "")
+        location = payload.get("location", "")
         fingerprint = hashlib.sha256(
             "{}|{}|{}|{}".format(
-                draft.domain, draft.title.strip().lower(), draft.location, draft.severity
+                domain, str(title).strip().lower(), location, severity
             ).encode("utf-8")
         ).hexdigest()[:16]
-        finding = Finding(
+        return Finding(
             id=new_id("finding"),
-            title=draft.title,
-            severity=draft.severity,
-            domain=draft.domain,
+            title=title,
+            severity=severity,
+            domain=domain,
             persona=check.persona,
-            strength=draft.strength,
-            consequence=draft.consequence,
-            location=draft.location,
-            reproduction=draft.reproduction,
-            evidence=list(draft.evidence) or list(check.evidence),
-            remediation=draft.remediation,
-            verification=draft.verification,
+            strength=payload.get("strength", ""),
+            consequence=payload.get("consequence", ""),
+            location=location,
+            reproduction=payload.get("reproduction", ""),
+            evidence=list(payload.get("evidence") or []) or list(check.evidence),
+            remediation=payload.get("remediation", ""),
+            verification=payload.get("verification", ""),
             check_id=check.id,
-            tags=list(draft.tags),
+            tags=list(payload.get("tags") or []),
             fingerprint=fingerprint,
         )
-        persona = self.persona_map.get(check.persona)
-        if persona is not None:
-            errors = validate_payload(finding.to_dict(), persona.output_schema)
-            if errors:
-                finding.tags.append("schema-invalid")
-                self.log(
-                    "WARNING: finding from {} does not satisfy the persona schema: {}".format(
-                        check.persona, "; ".join(errors[:5])
-                    )
-                )
-        return finding
 
     def _mark_remaining_skipped(self, reason: str) -> None:
         assert self.state is not None
@@ -829,6 +960,9 @@ class Orchestrator:
                 "error": len([c for c in self.state.checks if c.status == CheckStatus.ERROR.value]),
             },
             "findings": len(self.state.findings),
+            "invalid_findings": len(self.state.invalid_findings),
+            "contract_failures": dict(self.state.contract_failures),
+            "degraded_personas": list(self.state.degraded_personas),
             "kill_switch": self.state.kill_switch.to_dict(),
             "determinism": {
                 "seed": self.state.seed,
@@ -870,6 +1004,18 @@ class Orchestrator:
         if any(check.id == "browser.security" for check in self.state.checks):
             limitations.append(
                 "Security checks are bounded and non-destructive; they are not a penetration test or a certification."
+            )
+        if self.state.invalid_findings:
+            limitations.append(
+                "{} finding(s) violated a persona output contract and were quarantined; "
+                "they are excluded from scoring and kill-switch evaluation.".format(
+                    len(self.state.invalid_findings)
+                )
+            )
+        for persona in self.state.degraded_personas:
+            limitations.append(
+                "Persona '{}' produced three consecutive schema-invalid findings and is "
+                "marked degraded.".format(persona)
             )
         confidence = score_confidence(
             self.state.checks,

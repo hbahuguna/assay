@@ -184,6 +184,38 @@ class Finding:
 
 
 @dataclasses.dataclass
+class InvalidFinding:
+    """A finding that violated its persona's output contract.
+
+    Invalid findings are quarantined: they are persisted for inspection but
+    never enter scoring, finding counts, or kill-switch evaluation.
+    """
+
+    id: str
+    persona: str
+    check_id: str
+    errors: List[str]
+    payload: Any = dataclasses.field(default_factory=dict)
+    contract: str = "persona_output_schema"
+    recorded_at: str = dataclasses.field(default_factory=utc_now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "InvalidFinding":
+        return cls(
+            id=data["id"],
+            persona=data.get("persona", ""),
+            check_id=data.get("check_id", ""),
+            errors=list(data.get("errors", [])),
+            payload=data.get("payload", {}),
+            contract=data.get("contract", "persona_output_schema"),
+            recorded_at=data.get("recorded_at", utc_now()),
+        )
+
+
+@dataclasses.dataclass
 class Check:
     id: str
     title: str
@@ -326,6 +358,10 @@ class RunState:
     risks: List[Risk] = dataclasses.field(default_factory=list)
     checks: List[Check] = dataclasses.field(default_factory=list)
     findings: List[Finding] = dataclasses.field(default_factory=list)
+    invalid_findings: List[InvalidFinding] = dataclasses.field(default_factory=list)
+    contract_failures: Dict[str, int] = dataclasses.field(default_factory=dict)
+    contract_failure_streaks: Dict[str, int] = dataclasses.field(default_factory=dict)
+    degraded_personas: List[str] = dataclasses.field(default_factory=list)
     confidence: Confidence = dataclasses.field(default_factory=Confidence)
     kill_switch: KillSwitch = dataclasses.field(default_factory=KillSwitch)
     inventory: Dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -355,6 +391,10 @@ class RunState:
             "risks": [r.to_dict() for r in self.risks],
             "checks": [c.to_dict() for c in self.checks],
             "findings": [f.to_dict() for f in self.findings],
+            "invalid_findings": [f.to_dict() for f in self.invalid_findings],
+            "contract_failures": dict(self.contract_failures),
+            "contract_failure_streaks": dict(self.contract_failure_streaks),
+            "degraded_personas": list(self.degraded_personas),
             "confidence": self.confidence.to_dict(),
             "kill_switch": self.kill_switch.to_dict(),
             "inventory": self.inventory,
@@ -384,6 +424,18 @@ class RunState:
             risks=[Risk.from_dict(r) for r in data.get("risks", [])],
             checks=[Check.from_dict(c) for c in data.get("checks", [])],
             findings=[Finding.from_dict(f) for f in data.get("findings", [])],
+            invalid_findings=[
+                InvalidFinding.from_dict(f) for f in data.get("invalid_findings", [])
+            ],
+            contract_failures={
+                str(key): int(value)
+                for key, value in dict(data.get("contract_failures", {})).items()
+            },
+            contract_failure_streaks={
+                str(key): int(value)
+                for key, value in dict(data.get("contract_failure_streaks", {})).items()
+            },
+            degraded_personas=list(data.get("degraded_personas", [])),
             confidence=Confidence.from_dict(data.get("confidence")),
             kill_switch=KillSwitch.from_dict(data.get("kill_switch")),
             inventory=dict(data.get("inventory", {})),
