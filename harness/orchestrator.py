@@ -185,6 +185,7 @@ class Orchestrator:
                 self.state_store.append_event(
                     {"run_id": self.state.run_id, "event": "run_failed", "error": self.state.error}
                 )
+                self.state_store.record_run(self.state)
             raise
         return state
 
@@ -909,6 +910,7 @@ class Orchestrator:
             generated_at=str(generated_at) if generated_at else None,
         )
         self.state_store.save_report(report)
+        self.state_store.record_run(self.state, report)
         self.state_store.append_event(
             {
                 "run_id": self.state.run_id,

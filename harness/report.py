@@ -47,7 +47,7 @@ def _coverage(state: RunState) -> Dict[str, Any]:
     }
 
 
-def _decision(state: RunState) -> Dict[str, str]:
+def decision_for_state(state: RunState) -> Dict[str, str]:
     gate = state.confidence.gate or {}
     status = gate.get("status", "warn")
     if state.status == "halted":
@@ -99,7 +99,7 @@ def build_report(
         }
         for check in state.checks
     ]
-    decision = _decision(state)
+    decision = decision_for_state(state)
     limitations = list(state.confidence.limitations)
     for check in state.checks:
         if check.metadata.get("limitation"):

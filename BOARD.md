@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-005 - Add a run history index and retention policy
-
-- **Epic:** E1 Deterministic Core Engine
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-002
-- **Status:** Ready
-- **Description:** Maintain `.harness/history.json` with run id, target, status,
-  score, finding counts, and evidence path. Add `--keep-runs` and a prune
-  command that never deletes the latest completed run.
-- **Acceptance Criteria:**
-  - History is updated atomically at the end of every run.
-  - `status --all` lists runs newest-first with score and decision.
-  - Pruning by count or age removes both state and evidence for selected runs.
-  - The latest completed run and all halted runs are retained by default.
-
 ### QH-006 - Move check ownership into persona contracts
 
 - **Epic:** E2 Specialist Persona Layer
@@ -684,7 +668,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-004` are complete, so `QH-005` is now
+No task is claimed. `QH-001` through `QH-005` are complete, so `QH-006` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task, and `QH-010` can proceed in parallel because it has
 no dependency.
@@ -801,6 +785,29 @@ no dependency.
   `generated_at` override, and CLI flag wiring. Full suite: 65 passing tests
   with Python 3.11. CLI flags and behavior documented in `README.md`.
 
+### QH-005 - Add a run history index and retention policy
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-002
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added `.harness/history.json` with run id, target, status,
+  score, decision, finding counts, evidence path, and timestamps. The index is
+  written atomically after every run, `status --all` lists runs newest-first,
+  and `run --keep-runs` plus the `prune` command enforce count and age retention.
+- **Acceptance Criteria:**
+  - History is updated atomically at the end of every run.
+  - `status --all` lists runs newest-first with score and decision.
+  - Pruning by count or age removes both state and evidence for selected runs.
+  - The latest completed run and all halted runs are retained by default.
+- **Evidence:** `tests/test_history.py` covers atomic history writes,
+  `status --all` ordering and metadata, count and age pruning, evidence
+  deletion, halted-run protection, dry-run behavior, failed-run recording, and
+  CLI wiring for `status --all`, `run --keep-runs`, and `prune`. Full suite: 74
+  passing tests with Python 3.11. Behavior documented in `README.md`.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -839,3 +846,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D12 | 2026-11-10 | Evidence is checkpointed atomically after each completed check, before progress state, and reconciled on resume. | Progress and manifest are separate files; ordering the evidence write first plus reconciliation prevents a completed check from losing its artifacts, while stale entries from a crashed check are discarded. | Revisit if state and evidence move into a single transactional store. |
 | D13 | 2026-11-10 | Built-in and installed checks share a registry; plugins use signed `quality_harness.checks` entry points and a project-local HMAC trust store. | The dependency-free core cannot bundle a public-key library, while symmetric signatures still let an operator pin trusted plugin publishers. Load, signature, and ownership failures are blocked coverage gaps rather than run failures. | Replace HMAC with a public-key scheme when an optional plugin-signing extra or package verifier exists. |
 | D14 | 2026-11-10 | Clock and entropy are context-scoped providers; seeded runs use SHA-256 based id generation and an optional frozen clock. | Existing `utc_now`/`new_id` call sites stay intact, production defaults remain real UTC and UUID entropy, and seeded runs can reproduce report bytes without patching every module. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent determinism. |
+| D15 | 2026-11-11 | `.harness/history.json` is the run index; pruning writes the retained index before deleting evidence and always protects the latest run, latest completed run, and halted runs. | A crash during pruning must not leave history claiming deleted evidence, and operators need a stable latest run plus halted runs for incident review. | Move to per-run state snapshots if pruning must also remove non-latest progress state transactionally. |

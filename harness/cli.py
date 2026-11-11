@@ -108,12 +108,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the report generated_at timestamp with an ISO-8601 value.",
     )
     run.add_argument("--resume", action="store_true", help="Resume the last incomplete run.")
+    run.add_argument(
+        "--keep-runs",
+        type=int,
+        default=None,
+        help="Keep at most this many historical runs after the run completes.",
+    )
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
     run.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
 
     status = subparsers.add_parser("status", help="Print the latest persisted run state as JSON.")
     status.add_argument("--root", default=".")
+    status.add_argument(
+        "--all",
+        action="store_true",
+        help="List every historical run newest-first instead of the latest run.",
+    )
+
+    prune = subparsers.add_parser(
+        "prune", help="Prune historical runs and their evidence by count or age."
+    )
+    prune.add_argument("--root", default=".")
+    prune.add_argument(
+        "--keep-runs",
+        type=int,
+        default=None,
+        help="Keep at most this many runs; protected runs are always retained.",
+    )
+    prune.add_argument(
+        "--older-than-days",
+        type=int,
+        default=None,
+        help="Prune runs whose completion timestamp is older than this many days.",
+    )
+    prune.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be pruned without changing history or evidence.",
+    )
 
     report = subparsers.add_parser("report", help="Print the latest saved report as JSON.")
     report.add_argument("--root", default=".")
@@ -158,6 +191,8 @@ def _run(args: argparse.Namespace) -> int:
 
     orchestrator = Orchestrator(root, options, log=log)
     state = orchestrator.run(resume=args.resume)
+    if args.keep_runs is not None:
+        orchestrator.state_store.prune(keep_runs=args.keep_runs)
     report = orchestrator.state_store.load_report()
     if args.output:
         output_path = Path(args.output).expanduser()
@@ -185,6 +220,19 @@ def _run(args: argparse.Namespace) -> int:
 
 def _status(args: argparse.Namespace) -> int:
     store = StateStore(Path(args.root).expanduser().resolve())
+    if getattr(args, "all", False):
+        history = store.load_history()
+        runs = history.get("runs", [])
+        _print_json(
+            {
+                "schema_version": REPORT_SCHEMA,
+                "status": "ok",
+                "count": len(runs),
+                "runs": runs,
+                "root": str(store.root),
+            }
+        )
+        return 0
     if not store.exists():
         _print_json(
             {
@@ -223,6 +271,26 @@ def _status(args: argparse.Namespace) -> int:
         "completed_at": state.completed_at,
     }
     _print_json(payload)
+    return 0
+
+
+def _prune(args: argparse.Namespace) -> int:
+    store = StateStore(Path(args.root).expanduser().resolve())
+    result = store.prune(
+        keep_runs=args.keep_runs,
+        older_than_days=args.older_than_days,
+        dry_run=args.dry_run,
+    )
+    _print_json(
+        {
+            "schema_version": REPORT_SCHEMA,
+            "status": "dry_run" if args.dry_run else "pruned",
+            "root": str(store.root),
+            "removed": result["removed"],
+            "retained": result["retained"],
+            "count": len(result["retained"]),
+        }
+    )
     return 0
 
 
@@ -291,6 +359,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _run(args)
         if args.command == "status":
             return _status(args)
+        if args.command == "prune":
+            return _prune(args)
         if args.command == "report":
             return _report(args)
         if args.command == "abort":

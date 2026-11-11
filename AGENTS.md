@@ -142,7 +142,7 @@ A task is done only when all of the following are true:
 | `harness/browser.py` | Optional Playwright Operate layer and evidence capture |
 | `harness/scoring.py` | `weighted-coverage-v1` confidence math and gate policy |
 | `harness/evidence.py` | Hashed artifact store, manifest, and verification |
-| `harness/state.py` | Atomic progress state, events, and manual kill file |
+| `harness/state.py` | Atomic progress state, events, run history, retention, and manual kill file |
 | `harness/report.py` | Stable `quality-harness.report/v1` report |
 | `personas/` | Specialist contracts with tools, schema, and refusals |
 | `tests/` | Unit and end-to-end contract tests |

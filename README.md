@@ -161,6 +161,30 @@ Two runs with the same seed and frozen clock produce identical findings, ids,
 weights, phase details, and confidence breakdown. Omit both flags to keep
 production behavior.
 
+### Run history and retention
+
+Every run records a history entry in `.harness/history.json` with the run id,
+target, status, score, decision, finding counts, evidence path, and timestamps.
+The index is written atomically after the run finishes.
+
+```bash
+# List every run newest-first.
+python -m harness status --all --root .harness-demo
+
+# Keep at most three runs after a run completes.
+python -m harness run --target examples/sample-repo --no-browser \
+  --root .harness-demo --keep-runs 3
+
+# Prune by count or age, or preview the decision.
+python -m harness prune --root .harness-demo --keep-runs 3
+python -m harness prune --root .harness-demo --older-than-days 30
+python -m harness prune --root .harness-demo --keep-runs 3 --dry-run
+```
+
+Pruning removes both the history entry and the run's evidence directory. The
+latest run, the latest completed run, and every halted run are always retained.
+The current `progress.json` and `report.json` are never removed by pruning.
+
 ### Live browser checks
 
 ```bash
