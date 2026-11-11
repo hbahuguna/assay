@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-012 - Support authenticated flows via storage-state injection
-
-- **Epic:** E3 Inspect and Operate Evidence
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-010
-- **Status:** Ready
-- **Description:** Allow a run to load a Playwright storage state from an
-  environment-provided file or secret reference so authenticated surfaces can be
-  checked without committing credentials.
-- **Acceptance Criteria:**
-  - Storage state is loaded only from an explicit path or secret provider.
-  - Cookies and tokens never appear in reports or evidence.
-  - A missing or expired state blocks authenticated checks with an actionable
-    limitation; anonymous checks still run.
-  - Tests use a local fixture login and assert redaction end to end.
-
 ### QH-013 - Add a responsive and mobile Operate check pack
 
 - **Epic:** E3 Inspect and Operate Evidence
@@ -572,7 +555,7 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-011` are complete, so `QH-012` is now
+No task is claimed. `QH-001` through `QH-012` are complete, so `QH-013` is now
 the lowest-numbered unblocked task. `QH-019` remains the first
 commercial-critical-path task.
 
@@ -885,6 +868,32 @@ commercial-critical-path task.
   `[REDACTED]` does. It also verifies that disabling all flags leaves the
   evidence set unchanged. Full suite: 98 passing tests with Python 3.11.
   `README.md` documents the capture flags.
+
+### QH-012 - Support authenticated flows via storage-state injection
+
+- **Epic:** E3 Inspect and Operate Evidence
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-010
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added `--storage-state` support for Playwright browser runs.
+  State can be loaded from an explicit file path or an `env:VAR` secret reference.
+  Missing, empty, or expired state blocks browser checks with an actionable
+  limitation while anonymous static checks still run. Cookies and tokens are
+  redacted before they reach reports or evidence.
+- **Acceptance Criteria:**
+  - Storage state is loaded only from an explicit path or secret provider.
+  - Cookies and tokens never appear in reports or evidence.
+  - A missing or expired state blocks authenticated checks with an actionable
+    limitation; anonymous checks still run.
+  - Tests use a local fixture login and assert redaction end to end.
+- **Evidence:** `tests/test_authenticated_browser.py` uses a local login fixture
+  and Playwright to create a storage state, then verifies that an authenticated
+  page loads, that cookies and tokens are redacted end to end, that missing and
+  expired states block browser checks while static checks run, and that
+  `env:VAR` secret references work. Full suite: 102 passing tests with Python
+  3.11. `README.md` documents `--storage-state`.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

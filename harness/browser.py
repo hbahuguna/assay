@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
@@ -182,6 +185,7 @@ class BrowserOptions:
     capture_har: bool = False
     capture_trace: bool = False
     capture_video: bool = False
+    storage_state: Optional[str] = None
 
 
 @dataclass
@@ -229,6 +233,10 @@ class BrowserController:
                 "viewport": {"width": self.options.viewport_width, "height": self.options.viewport_height},
                 "ignore_https_errors": False,
             }
+            if self.options.storage_state:
+                context_options["storage_state"] = self._load_storage_state(
+                    self.options.storage_state
+                )
             if self.options.capture_har:
                 self.har_path = self.evidence.run_dir / ".capture.har"
                 context_options["record_har_path"] = str(self.har_path)
@@ -648,6 +656,58 @@ class BrowserController:
         visit(snapshot)
         return snapshot
 
+
+    @staticmethod
+    def _load_storage_state(value: str) -> Dict[str, Any]:
+        raw = value
+        if value.startswith("env:"):
+            variable = value[4:]
+            raw = os.environ.get(variable)
+            if raw is None:
+                raise BrowserUnavailable(
+                    "Storage state environment variable '{}' is not set.".format(variable)
+                )
+        else:
+            path = Path(value)
+            if not path.is_file():
+                raise BrowserUnavailable(
+                    "Storage state file was not found: {}".format(value)
+                )
+            raw = path.read_text(encoding="utf-8")
+
+        try:
+            state = json.loads(raw)
+        except (TypeError, ValueError):
+            raise BrowserUnavailable("Storage state is not valid JSON.")
+
+        if not isinstance(state, dict):
+            raise BrowserUnavailable("Storage state must be a JSON object.")
+
+        cookies = state.get("cookies", [])
+        origins = state.get("origins", [])
+        if not isinstance(cookies, list) or not isinstance(origins, list):
+            raise BrowserUnavailable("Storage state cookies and origins must be arrays.")
+
+        now = time.time()
+        has_valid_cookie = False
+        for cookie in cookies:
+            if not isinstance(cookie, dict):
+                raise BrowserUnavailable("Storage state contains an invalid cookie entry.")
+            expires = cookie.get("expires", -1)
+            if expires in (None, 0, -1):
+                has_valid_cookie = True
+            elif isinstance(expires, (int, float)) and not isinstance(expires, bool):
+                if expires > now:
+                    has_valid_cookie = True
+
+        if cookies and not has_valid_cookie and not origins:
+            raise BrowserUnavailable(
+                "Storage state has expired; provide a fresh state file or secret."
+            )
+        if not cookies and not origins:
+            raise BrowserUnavailable("Storage state is empty.")
+
+        return state
 
     @staticmethod
     def _redact_text(value: Any) -> Any:

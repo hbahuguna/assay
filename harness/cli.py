@@ -118,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--browser-har", action="store_true", help="Capture a redacted HTTP Archive for browser runs.")
     run.add_argument("--browser-trace", action="store_true", help="Capture a Playwright trace for browser runs.")
     run.add_argument("--browser-video", action="store_true", help="Capture browser video for browser runs.")
+    run.add_argument("--storage-state", help="Path or env:VAR reference to a Playwright storage state file.")
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
     run.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
@@ -216,6 +217,7 @@ def _run(args: argparse.Namespace) -> int:
         browser_har=args.browser_har,
         browser_trace=args.browser_trace,
         browser_video=args.browser_video,
+        storage_state=args.storage_state,
         require_personas=3,
         seed=args.seed,
         clock_mode=args.clock_mode,

@@ -141,6 +141,7 @@ class RunOptions:
     browser_har: bool = False
     browser_trace: bool = False
     browser_video: bool = False
+    storage_state: Optional[str] = None
     require_personas: int = 3
     verbose: bool = False
     seed: Optional[int] = None
@@ -732,6 +733,7 @@ class Orchestrator:
                             capture_har=self.options.browser_har,
                             capture_trace=self.options.browser_trace,
                             capture_video=self.options.browser_video,
+                            storage_state=self.options.storage_state,
                         ),
                         self._browser_outcome_callback,
                     )

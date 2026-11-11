@@ -211,6 +211,26 @@ If Playwright or Chromium cannot start, browser checks are reported as
 `blocked` with an actionable reason. They are never converted into passes, and
 the run continues with source evidence.
 
+Authenticated flows can load a Playwright storage state from an explicit file or
+an environment variable:
+
+```bash
+python -m harness run --target http://127.0.0.1:8765/ \
+  --source examples/sample-repo \
+  --storage-state .harness/auth-state.json \
+  --root .harness-live
+
+# Or from a secret provider:
+python -m harness run --target http://127.0.0.1:8765/ \
+  --source examples/sample-repo \
+  --storage-state env:AUTH_STATE \
+  --root .harness-live
+```
+
+If the state is missing, empty, or expired, browser checks are blocked with an
+actionable limitation while anonymous static checks still run. Cookies and
+tokens are redacted before they reach reports or evidence.
+
 Optional browser capture is off by default and can be enabled per run:
 
 ```bash
