@@ -1,0 +1,17 @@
+{
+  "id": "live-only",
+  "label": "pass",
+  "description": "Browser-only evidence is useful but lacks source inspection.",
+  "expected_decision": "ship",
+  "expected_gate": "pass",
+  "checks": [
+    {
+      "id": "browser.a",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "functional"
+    }
+  ],
+  "findings": []
+}

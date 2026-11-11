@@ -45,6 +45,9 @@ python -m harness personas lint --personas-dir personas
 # Scaffold a new specialist contract without copying by hand.
 python -m harness personas scaffold reliability --personas-dir personas
 
+# Run labeled confidence calibration fixtures.
+python -m harness calibrate --fixtures-dir calibration/fixtures
+
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
 python -m harness report --root .harness-demo

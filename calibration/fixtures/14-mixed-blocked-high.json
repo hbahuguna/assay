@@ -1,0 +1,31 @@
+{
+  "id": "mixed-blocked-high",
+  "label": "hold",
+  "description": "A blocked check plus a high finding compounds into a hold.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "blocked",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "title": "High finding",
+      "domain": "functional",
+      "fingerprint": "mixed-high"
+    }
+  ]
+}

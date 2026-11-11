@@ -1,0 +1,32 @@
+{
+  "id": "suspected-high",
+  "label": "warn",
+  "description": "A suspected high finding carries half the normal penalty.",
+  "expected_decision": "review",
+  "expected_gate": "warn",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "title": "Suspected high",
+      "domain": "functional",
+      "strength": "suspected",
+      "fingerprint": "suspected-high"
+    }
+  ]
+}

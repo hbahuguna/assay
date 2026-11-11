@@ -1,0 +1,31 @@
+{
+  "id": "critical-finding",
+  "label": "hold",
+  "description": "A critical finding fails the advisory gate.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "Critical finding",
+      "domain": "functional",
+      "fingerprint": "critical-1"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "full-pass",
+  "label": "pass",
+  "description": "All planned checks pass with no findings.",
+  "expected_decision": "ship",
+  "expected_gate": "pass",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": []
+}

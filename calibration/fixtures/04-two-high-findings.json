@@ -1,0 +1,37 @@
+{
+  "id": "two-high-findings",
+  "label": "warn",
+  "description": "Two high findings cap the score at 65 but do not fail the gate by themselves.",
+  "expected_decision": "review",
+  "expected_gate": "warn",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "title": "High one",
+      "domain": "functional",
+      "fingerprint": "high-a"
+    },
+    {
+      "severity": "high",
+      "title": "High two",
+      "domain": "functional",
+      "fingerprint": "high-b"
+    }
+  ]
+}

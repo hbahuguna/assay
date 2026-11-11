@@ -1,0 +1,31 @@
+{
+  "id": "high-finding",
+  "label": "warn",
+  "description": "One high-severity finding keeps the run in review.",
+  "expected_decision": "review",
+  "expected_gate": "warn",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "high",
+      "title": "High finding",
+      "domain": "functional",
+      "fingerprint": "high-1"
+    }
+  ]
+}

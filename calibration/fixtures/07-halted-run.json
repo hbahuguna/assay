@@ -1,0 +1,25 @@
+{
+  "id": "halted-run",
+  "label": "hold",
+  "description": "A kill-switch halt caps confidence at 25.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [],
+  "halted": true
+}

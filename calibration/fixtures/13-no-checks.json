@@ -1,0 +1,9 @@
+{
+  "id": "no-checks",
+  "label": "hold",
+  "description": "No planned checks cannot claim release confidence.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [],
+  "findings": []
+}

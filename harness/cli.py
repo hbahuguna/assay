@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import __version__
+from .calibration import run_calibration, write_calibration_report
 from .errors import HarnessError, PersonaError
 from .models import CheckStatus, Severity, severity_rank, utc_now
 from .orchestrator import Orchestrator, RunOptions
@@ -199,6 +200,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow 'personas scaffold' to overwrite an existing contract.",
     )
+
+    calibrate = subparsers.add_parser(
+        "calibrate",
+        help="Run labeled confidence calibration fixtures and write a report.",
+    )
+    calibrate.add_argument("--fixtures-dir", default="calibration/fixtures")
+    calibrate.add_argument("--output", default="calibration/report.json")
+    calibrate.add_argument("--root", default=".")
 
     return parser
 
@@ -458,6 +467,21 @@ def _personas(args: argparse.Namespace) -> int:
     raise PersonaError("Unknown personas action: {}".format(action))
 
 
+def _calibrate(args: argparse.Namespace) -> int:
+    root = Path(args.root).expanduser().resolve()
+    fixtures_dir = Path(args.fixtures_dir).expanduser()
+    if not fixtures_dir.is_absolute():
+        cwd_candidate = Path.cwd() / fixtures_dir
+        root_candidate = root / fixtures_dir
+        fixtures_dir = cwd_candidate if cwd_candidate.is_dir() else root_candidate
+    output = Path(args.output).expanduser()
+    if not output.is_absolute():
+        output = Path.cwd() / output
+    report = write_calibration_report(fixtures_dir, output)
+    _print_json(report)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -477,6 +501,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _abort(args)
         if args.command == "personas":
             return _personas(args)
+        if args.command == "calibrate":
+            return _calibrate(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

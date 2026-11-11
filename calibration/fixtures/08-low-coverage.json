@@ -1,0 +1,38 @@
+{
+  "id": "low-coverage",
+  "label": "hold",
+  "description": "Executing one quarter of planned weight cannot support a ship decision.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "b",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "planned",
+      "domain": "functional"
+    },
+    {
+      "id": "c",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "planned",
+      "domain": "functional"
+    },
+    {
+      "id": "d",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "planned",
+      "domain": "functional"
+    }
+  ],
+  "findings": []
+}

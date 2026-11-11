@@ -1,0 +1,24 @@
+{
+  "id": "blocked-check",
+  "label": "hold",
+  "description": "A blocked check is a coverage gap and lowers confidence.",
+  "expected_decision": "hold",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "blocked",
+      "domain": "reliability"
+    }
+  ],
+  "findings": []
+}

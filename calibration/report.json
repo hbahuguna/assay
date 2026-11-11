@@ -1,0 +1,945 @@
+{
+  "schema_version": "quality-harness.calibration/v1",
+  "formula": "weighted-coverage-v1",
+  "fixture_count": 14,
+  "fixtures": [
+    {
+      "id": "full-pass",
+      "label": "pass",
+      "description": "All planned checks pass with no findings.",
+      "expected_decision": "ship",
+      "expected_gate": "pass",
+      "actual_decision": "ship",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 100.0,
+      "band": "high",
+      "gate": "pass",
+      "gate_reasons": [
+        "No advisory release blockers were detected in the executed scope."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 0.0,
+        "score": 100.0,
+        "band": "high",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "high-finding",
+      "label": "warn",
+      "description": "One high-severity finding keeps the run in review.",
+      "expected_decision": "review",
+      "expected_gate": "warn",
+      "actual_decision": "review",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 80.0,
+      "band": "moderate",
+      "gate": "warn",
+      "gate_reasons": [
+        "1 high-severity finding(s) remain open."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 20.0,
+        "score": 80.0,
+        "band": "moderate",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 20.0,
+        "by_severity": {
+          "high": 1
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "critical-finding",
+      "label": "hold",
+      "description": "A critical finding fails the advisory gate.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "hold",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 30.0,
+      "band": "low",
+      "gate": "fail",
+      "gate_reasons": [
+        "One or more critical findings are present.",
+        "Confidence is below the advisory release floor of 60."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 45.0,
+        "score": 30.0,
+        "band": "low",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 45.0,
+        "by_severity": {
+          "critical": 1
+        },
+        "caps": [
+          {
+            "reason": "critical finding",
+            "cap": 30.0
+          }
+        ]
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "two-high-findings",
+      "label": "warn",
+      "description": "Two high findings cap the score at 65 but do not fail the gate by themselves.",
+      "expected_decision": "review",
+      "expected_gate": "warn",
+      "actual_decision": "review",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 60.0,
+      "band": "guarded",
+      "gate": "warn",
+      "gate_reasons": [
+        "2 high-severity finding(s) remain open."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 40.0,
+        "score": 60.0,
+        "band": "guarded",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 40.0,
+        "by_severity": {
+          "high": 2
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "medium-findings",
+      "label": "warn",
+      "description": "Repeated medium findings push the score below the ship floor.",
+      "expected_decision": "review",
+      "expected_gate": "fail",
+      "actual_decision": "review",
+      "decision_match": true,
+      "gate_match": false,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 76.0,
+      "band": "moderate",
+      "gate": "warn",
+      "gate_reasons": [
+        "No advisory release blockers were detected in the executed scope."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 24.0,
+        "score": 76.0,
+        "band": "moderate",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 24.0,
+        "by_severity": {
+          "medium": 3
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "blocked-check",
+      "label": "hold",
+      "description": "A blocked check is a coverage gap and lowers confidence.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "review",
+      "decision_match": false,
+      "gate_match": false,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 62.5,
+      "band": "guarded",
+      "gate": "warn",
+      "gate_reasons": [
+        "Executed coverage is below 70% of planned weight."
+      ],
+      "coverage": 50.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 1,
+        "passed_checks": 1,
+        "failed_checks": 0,
+        "blocked_checks": 1,
+        "total_weight": 2.0,
+        "executed_weight": 1.0,
+        "passed_weight": 1.0,
+        "coverage_ratio": 0.5,
+        "quality": 100.0,
+        "coverage_factor": 0.625,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 62.5,
+        "severity_penalty": 0.0,
+        "score": 62.5,
+        "band": "guarded",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 0.0,
+          "passed_weight": 0.0,
+          "checks": 1,
+          "passed": 0,
+          "failed": 0,
+          "blocked": 1,
+          "score": 0.0,
+          "coverage": 0.0
+        }
+      }
+    },
+    {
+      "id": "halted-run",
+      "label": "hold",
+      "description": "A kill-switch halt caps confidence at 25.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "hold",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 25.0,
+      "band": "low",
+      "gate": "fail",
+      "gate_reasons": [
+        "Confidence is below the advisory release floor of 60."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 0.0,
+        "score": 25.0,
+        "band": "low",
+        "halted": true
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": [
+          {
+            "reason": "kill switch halted execution",
+            "cap": 25.0
+          }
+        ]
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "low-coverage",
+      "label": "hold",
+      "description": "Executing one quarter of planned weight cannot support a ship decision.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "hold",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 39.4,
+      "band": "low",
+      "gate": "fail",
+      "gate_reasons": [
+        "Executed coverage is below 70% of planned weight.",
+        "Confidence is below the advisory release floor of 60."
+      ],
+      "coverage": 25.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 4,
+        "executed_checks": 1,
+        "passed_checks": 1,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 4.0,
+        "executed_weight": 1.0,
+        "passed_weight": 1.0,
+        "coverage_ratio": 0.25,
+        "quality": 100.0,
+        "coverage_factor": 0.4375,
+        "scope_mode": "source",
+        "scope_factor": 0.9,
+        "base_score": 39.4,
+        "severity_penalty": 0.0,
+        "score": 39.4,
+        "band": "low",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 4.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 4,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 3,
+          "score": 100.0,
+          "coverage": 25.0
+        }
+      }
+    },
+    {
+      "id": "source-only",
+      "label": "pass",
+      "description": "Static-only evidence still scores well, but lacks live coverage.",
+      "expected_decision": "review",
+      "expected_gate": "pass",
+      "actual_decision": "ship",
+      "decision_match": false,
+      "gate_match": true,
+      "intentional_disagreement": true,
+      "human_note": "A human reviewer may require live browser evidence before shipping, even though the static-only scope factor leaves the score above 80.",
+      "score": 90.0,
+      "band": "high",
+      "gate": "pass",
+      "gate_reasons": [
+        "No advisory release blockers were detected in the executed scope."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 1,
+        "executed_checks": 1,
+        "passed_checks": 1,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 1.0,
+        "executed_weight": 1.0,
+        "passed_weight": 1.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "source",
+        "scope_factor": 0.9,
+        "base_score": 90.0,
+        "severity_penalty": 0.0,
+        "score": 90.0,
+        "band": "high",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "live-only",
+      "label": "pass",
+      "description": "Browser-only evidence is useful but lacks source inspection.",
+      "expected_decision": "ship",
+      "expected_gate": "pass",
+      "actual_decision": "ship",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 90.0,
+      "band": "high",
+      "gate": "pass",
+      "gate_reasons": [
+        "No advisory release blockers were detected in the executed scope."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 1,
+        "executed_checks": 1,
+        "passed_checks": 1,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 1.0,
+        "executed_weight": 1.0,
+        "passed_weight": 1.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "live",
+        "scope_factor": 0.9,
+        "base_score": 90.0,
+        "severity_penalty": 0.0,
+        "score": 90.0,
+        "band": "high",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 0.0,
+        "by_severity": {},
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "suspected-high",
+      "label": "warn",
+      "description": "A suspected high finding carries half the normal penalty.",
+      "expected_decision": "review",
+      "expected_gate": "warn",
+      "actual_decision": "review",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 90.0,
+      "band": "high",
+      "gate": "warn",
+      "gate_reasons": [
+        "1 high-severity finding(s) remain open."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 10.0,
+        "score": 90.0,
+        "band": "high",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 10.0,
+        "by_severity": {
+          "high": 1
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "duplicate-fingerprint",
+      "label": "warn",
+      "description": "Duplicate high findings are penalized once.",
+      "expected_decision": "review",
+      "expected_gate": "warn",
+      "actual_decision": "review",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 80.0,
+      "band": "moderate",
+      "gate": "warn",
+      "gate_reasons": [
+        "1 high-severity finding(s) remain open."
+      ],
+      "coverage": 100.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 2,
+        "passed_checks": 2,
+        "failed_checks": 0,
+        "blocked_checks": 0,
+        "total_weight": 2.0,
+        "executed_weight": 2.0,
+        "passed_weight": 2.0,
+        "coverage_ratio": 1.0,
+        "quality": 100.0,
+        "coverage_factor": 1.0,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 100.0,
+        "severity_penalty": 20.0,
+        "score": 80.0,
+        "band": "moderate",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 20.0,
+        "by_severity": {
+          "high": 1
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        }
+      }
+    },
+    {
+      "id": "no-checks",
+      "label": "hold",
+      "description": "No planned checks cannot claim release confidence.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "hold",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 0.0,
+      "band": "none",
+      "gate": "fail",
+      "gate_reasons": [
+        "No checks were planned."
+      ],
+      "coverage": 0.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 0
+      },
+      "penalties": {},
+      "domain_scores": {}
+    },
+    {
+      "id": "mixed-blocked-high",
+      "label": "hold",
+      "description": "A blocked check plus a high finding compounds into a hold.",
+      "expected_decision": "hold",
+      "expected_gate": "fail",
+      "actual_decision": "hold",
+      "decision_match": true,
+      "gate_match": true,
+      "intentional_disagreement": false,
+      "human_note": "",
+      "score": 42.5,
+      "band": "low",
+      "gate": "fail",
+      "gate_reasons": [
+        "1 high-severity finding(s) remain open.",
+        "Executed coverage is below 70% of planned weight.",
+        "Confidence is below the advisory release floor of 60."
+      ],
+      "coverage": 50.0,
+      "breakdown": {
+        "formula": "weighted-coverage-v1",
+        "planned_checks": 2,
+        "executed_checks": 1,
+        "passed_checks": 1,
+        "failed_checks": 0,
+        "blocked_checks": 1,
+        "total_weight": 2.0,
+        "executed_weight": 1.0,
+        "passed_weight": 1.0,
+        "coverage_ratio": 0.5,
+        "quality": 100.0,
+        "coverage_factor": 0.625,
+        "scope_mode": "both",
+        "scope_factor": 1.0,
+        "base_score": 62.5,
+        "severity_penalty": 20.0,
+        "score": 42.5,
+        "band": "low",
+        "halted": false
+      },
+      "penalties": {
+        "severity_total": 20.0,
+        "by_severity": {
+          "high": 1
+        },
+        "caps": []
+      },
+      "domain_scores": {
+        "functional": {
+          "weight": 1.0,
+          "executed_weight": 1.0,
+          "passed_weight": 1.0,
+          "checks": 1,
+          "passed": 1,
+          "failed": 0,
+          "blocked": 0,
+          "score": 100.0,
+          "coverage": 100.0
+        },
+        "reliability": {
+          "weight": 1.0,
+          "executed_weight": 0.0,
+          "passed_weight": 0.0,
+          "checks": 1,
+          "passed": 0,
+          "failed": 0,
+          "blocked": 1,
+          "score": 0.0,
+          "coverage": 0.0
+        }
+      }
+    }
+  ],
+  "summary": {
+    "expected_decisions": {
+      "ship": 2,
+      "review": 6,
+      "hold": 6
+    },
+    "actual_decisions": {
+      "ship": 3,
+      "review": 6,
+      "hold": 5
+    },
+    "decision_matches": 12,
+    "decision_mismatches": 2,
+    "mismatched_fixtures": [
+      "blocked-check",
+      "source-only"
+    ],
+    "intentional_disagreements": [
+      "source-only"
+    ]
+  }
+}

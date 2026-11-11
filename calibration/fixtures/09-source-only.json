@@ -1,0 +1,19 @@
+{
+  "id": "source-only",
+  "label": "pass",
+  "description": "Static-only evidence still scores well, but lacks live coverage.",
+  "expected_decision": "review",
+  "expected_gate": "pass",
+  "intentional_disagreement": true,
+  "human_note": "A human reviewer may require live browser evidence before shipping, even though the static-only scope factor leaves the score above 80.",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    }
+  ],
+  "findings": []
+}

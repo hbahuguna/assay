@@ -1,0 +1,43 @@
+{
+  "id": "medium-findings",
+  "label": "warn",
+  "description": "Repeated medium findings push the score below the ship floor.",
+  "expected_decision": "review",
+  "expected_gate": "fail",
+  "checks": [
+    {
+      "id": "static.a",
+      "weight": 1.0,
+      "kind": "static",
+      "status": "passed",
+      "domain": "functional"
+    },
+    {
+      "id": "browser.b",
+      "weight": 1.0,
+      "kind": "browser",
+      "status": "passed",
+      "domain": "reliability"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "medium",
+      "title": "Medium one",
+      "domain": "functional",
+      "fingerprint": "medium-a"
+    },
+    {
+      "severity": "medium",
+      "title": "Medium two",
+      "domain": "functional",
+      "fingerprint": "medium-b"
+    },
+    {
+      "severity": "medium",
+      "title": "Medium three",
+      "domain": "functional",
+      "fingerprint": "medium-c"
+    }
+  ]
+}
