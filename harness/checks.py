@@ -57,6 +57,16 @@ CHECK_CATALOG: List[CheckDefinition] = [
         requires="any",
     ),
     CheckDefinition(
+        id="static.browser_category",
+        title="Browser category assessment scope is recorded",
+        domain="functional",
+        kind="static",
+        intent="Confirm that the browser category assessment was requested and represented.",
+        expected="The run intent explicitly requests the browser category and the planned scope is recorded as evidence.",
+        base_weight=0.5,
+        requires="any",
+    ),
+    CheckDefinition(
         id="static.inventory",
         title="Source and test inventory is complete and readable",
         domain="functional",
@@ -240,6 +250,11 @@ def _is_functionality_category_intent(intent: str) -> bool:
     return "assay functionality assessment" in text or "functionality category assessment" in text
 
 
+def _is_browser_category_intent(intent: str) -> bool:
+    text = (intent or "").lower()
+    return "assay browser assessment" in text or "browser category assessment" in text
+
+
 def _applicable(
     definition: CheckDefinition,
     inventory: Dict[str, Any],
@@ -253,6 +268,8 @@ def _applicable(
         return _is_test_category_intent(intent)
     if definition.id == "static.functionality_category":
         return _is_functionality_category_intent(intent)
+    if definition.id == "static.browser_category":
+        return _is_browser_category_intent(intent)
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))

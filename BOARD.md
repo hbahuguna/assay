@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-042 - Add harness support for the /assay-browser test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/assay-browser`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-043 - Add harness support for the /assay-issues test category
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2292,6 +2272,59 @@ No task is claimed. `QH-001` through `QH-036` are complete.
 - **Evidence:** `tests/test_test_category.py` verifies test-intent planning,
   execution, report inclusion, hashed manifest linkage, and absence for
   non-test intents. Full suite: 273 passing tests with Python 3.11.
+
+### QH-041 - Add harness support for the /assay-functionality test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `static.functionality_category`, owned by the functional
+  persona, to represent the `/assay-functionality` category when an intent
+  explicitly requests a functionality assessment. The check records hashed scope
+  evidence linked to the check and runs only for functionality-category intents,
+  so unrelated runs and weights are unchanged.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_functionality_category -v`
+- **Evidence:** `tests/test_functionality_category.py` verifies
+  functionality-intent planning, execution, report inclusion, hashed manifest
+  linkage, and absence for non-functionality intents. Full suite: 275 passing
+  tests with Python 3.11.
+
+### QH-042 - Add harness support for the /assay-browser test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `static.browser_category`, owned by the functional
+  persona, to represent the `/assay-browser` category when an intent explicitly
+  requests a browser assessment. The check records hashed scope evidence linked
+  to the check and runs only for browser-category intents, so unrelated runs and
+  weights are unchanged.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_browser_category -v`
+- **Evidence:** `tests/test_browser_category.py` verifies browser-intent
+  planning, execution, report inclusion, hashed manifest linkage, and absence
+  for non-browser intents. Full suite: 277 passing tests with Python 3.11.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

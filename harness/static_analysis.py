@@ -1041,6 +1041,31 @@ class StaticCheckRunner:
             metadata={"category": "functionality"},
         )
 
+    def check_static_browser_category(self, check: Check) -> CheckOutcome:
+        payload = {
+            "category": "browser",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "markup_files": len(self.inventory.markup_files),
+            "manifests": len(self.inventory.manifests),
+        }
+        evidence = self._save(
+            "browser-category-scope",
+            payload,
+            check,
+            "Browser category assessment scope and inventory summary.",
+        )
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual="Browser category assessment recorded for {} source file(s).".format(
+                len(self.inventory.source_files)
+            ),
+            evidence=[evidence],
+            metadata={"category": "browser"},
+        )
+
     def check_static_accessibility(self, check: Check) -> CheckOutcome:
         matches: List[Dict[str, Any]] = []
         for rel, path in self._iter_files(MARKUP_EXTENSIONS):

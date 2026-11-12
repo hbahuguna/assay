@@ -21,6 +21,7 @@ checks:
   - static.full_assessment
   - static.test_category
   - static.functionality_category
+  - static.browser_category
   - static.inventory
   - static.tests
   - static.ci
