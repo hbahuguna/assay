@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sys
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
 from pathlib import Path
@@ -29,6 +30,12 @@ from .determinism import (
 )
 from .errors import HarnessError, PersonaError, StateError, TargetError
 from .evidence import EvidenceStore
+from .metering import (
+    EVENT_BROWSER_MINUTE_CONSUMED,
+    EVENT_CHECK_EXECUTED,
+    EVENT_RUN_STARTED,
+    MeteringEmitter,
+)
 from .models import (
     Blocker,
     Check,
@@ -151,6 +158,8 @@ class RunOptions:
     clock_mode: str = "real"
     frozen_clock: object = None
     generated_at: object = None
+    workspace: str = "local"
+    metering_sink: Optional[str] = None
 
 
 class Orchestrator:
@@ -164,6 +173,7 @@ class Orchestrator:
         self.log_fn = log
         self.state: Optional[RunState] = None
         self.evidence: Optional[EvidenceStore] = None
+        self.metering: Optional[MeteringEmitter] = None
         self.personas: List[Persona] = []
         self.all_personas: List[Persona] = []
         self.persona_map: Dict[str, Persona] = {}
@@ -211,7 +221,29 @@ class Orchestrator:
             self.state_store.ensure()
             self.state_store.save(state)
         self.state = state
-        self.evidence = EvidenceStore(self.root, state.run_id)
+        sink_path = None
+        if self.options.metering_sink:
+            sink_path = Path(self.options.metering_sink).expanduser()
+            if not sink_path.is_absolute():
+                sink_path = self.root / sink_path
+        self.metering = MeteringEmitter(
+            self.root,
+            state.run_id,
+            workspace=self.options.workspace,
+            sink=sink_path,
+        )
+        self.evidence = EvidenceStore(self.root, state.run_id, metering=self.metering)
+        self._emit_metering(
+            EVENT_RUN_STARTED,
+            1,
+            "run",
+            idempotency_key="{}:{}".format(state.run_id, EVENT_RUN_STARTED),
+            metadata={
+                "workflow_id": state.workflow_id,
+                "workflow_version": state.workflow_version,
+                "target_kind": state.target.kind,
+            },
+        )
         evidence_phase = state.phase(PhaseName.EVIDENCE_COLLECTION.value)
         if resume and evidence_phase.status != PhaseStatus.COMPLETED.value:
             self.evidence.reconcile(state.checks)
@@ -773,7 +805,16 @@ class Orchestrator:
                         ),
                         desktop_callback,
                     )
-                    runner.run(self.state.target.resolved, desktop_browser_checks)
+                    browser_started = time.monotonic()
+                    try:
+                        runner.run(self.state.target.resolved, desktop_browser_checks)
+                    finally:
+                        self._emit_browser_minutes(
+                            "desktop",
+                            self.options.viewport,
+                            len(desktop_browser_checks),
+                            time.monotonic() - browser_started,
+                        )
             if mobile_browser_checks:
                 mobile_viewport = self.options.mobile_viewport.lower().split("x", 1)
                 if self.state.target.kind != "url":
@@ -808,7 +849,16 @@ class Orchestrator:
                         ),
                         mobile_callback,
                     )
-                    runner.run(self.state.target.resolved, mobile_browser_checks)
+                    browser_started = time.monotonic()
+                    try:
+                        runner.run(self.state.target.resolved, mobile_browser_checks)
+                    finally:
+                        self._emit_browser_minutes(
+                            "mobile",
+                            self.options.mobile_viewport,
+                            len(mobile_browser_checks),
+                            time.monotonic() - browser_started,
+                        )
 
         if self.state.kill_switch.triggered:
             self._mark_remaining_skipped("Kill switch halted execution.")
@@ -1118,6 +1168,20 @@ class Orchestrator:
                 "invalid_findings": invalid_count,
             }
         )
+        self._emit_metering(
+            EVENT_CHECK_EXECUTED,
+            1,
+            "check",
+            idempotency_key="{}:{}:{}".format(
+                self.state.run_id, EVENT_CHECK_EXECUTED, check.id
+            ),
+            metadata={
+                "check_id": check.id,
+                "status": check.status,
+                "persona": check.persona,
+                "kind": check.kind,
+            },
+        )
         threshold = self.options.kill_on
         if threshold == "never":
             return False
@@ -1381,6 +1445,8 @@ class Orchestrator:
         self.state.touch()
         self.state_store.save(self.state)
         assert self.evidence is not None and self.workflow is not None
+        if self.metering is not None:
+            self.state.options["metering"] = self.metering.summary()
         generated_at = self.options.generated_at or self.state.options.get("generated_at")
         report = build_report(
             self.state,
@@ -1410,6 +1476,51 @@ class Orchestrator:
         )
 
     # ------------------------------------------------------------------ util
+    def _emit_metering(
+        self,
+        event_type: str,
+        quantity: float = 1,
+        unit: Optional[str] = None,
+        *,
+        idempotency_key: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if self.metering is None:
+            return
+        try:
+            self.metering.emit(
+                event_type,
+                quantity,
+                unit,
+                idempotency_key=idempotency_key,
+                metadata=metadata,
+            )
+        except Exception as exc:
+            self.log(
+                "WARNING: metering event {} could not be written: {}".format(
+                    event_type, exc
+                )
+            )
+
+    def _emit_browser_minutes(
+        self, mode: str, viewport: str, checks: int, elapsed_seconds: float
+    ) -> None:
+        assert self.state is not None
+        quantity = max(round(float(elapsed_seconds) / 60.0, 6), 0.000001)
+        self._emit_metering(
+            EVENT_BROWSER_MINUTE_CONSUMED,
+            quantity,
+            "browser_minute",
+            idempotency_key="{}:{}:{}".format(
+                self.state.run_id, EVENT_BROWSER_MINUTE_CONSUMED, mode
+            ),
+            metadata={
+                "mode": mode,
+                "viewport": viewport,
+                "checks": int(checks),
+            },
+        )
+
     def log(self, message: str) -> None:
         if self.log_fn is not None:
             self.log_fn(message)

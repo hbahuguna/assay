@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quality-harness.dev/schemas/metering/evidence_byte_stored.v1.schema.json",
+  "title": "evidence_byte_stored usage event v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "idempotency_key",
+    "workspace",
+    "run",
+    "quantity",
+    "unit",
+    "timestamp",
+    "source",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "quality-harness.metering/v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "const": "evidence_byte_stored"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unit": {
+      "const": "byte"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "check_id": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

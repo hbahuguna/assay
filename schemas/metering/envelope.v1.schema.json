@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quality-harness.dev/schemas/metering/envelope.v1.schema.json",
+  "title": "Quality Harness usage event envelope v1",
+  "description": "One canonical billable usage event. Event-specific schemas extend this envelope.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "idempotency_key",
+    "workspace",
+    "run",
+    "quantity",
+    "unit",
+    "timestamp",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "quality-harness.metering/v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "run_started",
+        "check_executed",
+        "browser_minute_consumed",
+        "evidence_byte_stored",
+        "export_generated"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A duplicate delivery with the same key must be ignored."
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The run id every event reconciles to."
+    },
+    "quantity": {
+      "type": "number",
+      "minimum": 0
+    },
+    "unit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the action ran, for example oss or cloud."
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Event-specific fields. Never place credentials or raw customer data here."
+    }
+  },
+  "additionalProperties": true
+}

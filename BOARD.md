@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-019 - Define the metering event contract
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P0
-- **Points:** 5
-- **Depends on:** None
-- **Status:** Ready
-- **Description:** Define one canonical usage event for billable actions: run
-  started, check executed, browser minute consumed, evidence byte stored, and
-  export generated. Events must be idempotent and reconcile to a run id.
-- **Acceptance Criteria:**
-  - A JSON Schema exists for the event envelope and every event type.
-  - Duplicate delivery with the same idempotency key is ignored.
-  - A local OSS run emits the same events to a file sink without a cloud account.
-  - The schema includes workspace, run, quantity, unit, timestamp, and source.
-  - Contract tests freeze the v1 event names.
-
 ### QH-020 - Add workspace, API-key, and scoped-token authentication
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -456,9 +439,9 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-018` are complete, so `QH-019` is now
-the lowest-numbered unblocked task. `QH-019` is also the first
-commercial-critical-path task.
+No task is claimed. `QH-001` through `QH-019` are complete, so `QH-020` is now
+the lowest-numbered unblocked task. `QH-020` continues the
+commercial-critical-path chain.
 
 ## Blockers
 
@@ -940,6 +923,31 @@ commercial-critical-path task.
   audit events. Full suite: 125 passing tests with Python 3.11.
   `README.md` documents `suppress`.
 
+### QH-019 - Define the metering event contract
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P0
+- **Points:** 5
+- **Depends on:** None
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added the frozen `quality-harness.metering/v1` event contract,
+  a dependency-free idempotent JSON Lines file sink, local OSS emission for run,
+  check, browser-minute, evidence-byte, and export usage, and normative JSON
+  Schemas for the envelope and every event type.
+- **Acceptance Criteria:**
+  - A JSON Schema exists for the event envelope and every event type.
+  - Duplicate delivery with the same idempotency key is ignored.
+  - A local OSS run emits the same events to a file sink without a cloud account.
+  - The schema includes workspace, run, quantity, unit, timestamp, and source.
+  - Contract tests freeze the v1 event names.
+- **Evidence:** `tests/test_metering.py` freezes the five v1 event names, checks
+  every schema file, proves duplicate idempotency keys are ignored across emitter
+  instances, verifies a static OSS run writes reconcilable events to
+  `.harness/metering/events.jsonl`, and covers export events. Full suite: 136
+  passing tests with Python 3.11. `README.md` documents the sink and contract;
+  `BOARD.md` D21 records the architecture decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -984,3 +992,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D18 | 2026-11-11 | Every blocked check has exactly one persisted `Blocker`, validated against the owning persona's blocker schema and redacted before persistence. A blocked check carries zero findings, and a blocker-bearing outcome is forced to `blocked` even if a plugin reports `passed`. Planning failures materialize blockers before execution; runtime refusals replace them through the same one-per-check path. | A free-text blocked status hides why work stopped and whether it is covered elsewhere. A separate structured record preserves the refusal boundary without polluting findings, scoring, or the kill switch, and makes a blocked check impossible to misreport as a pass. | Add automatic `covered_by` resolution when another check's evidence covers the same risk, or add per-blocker expiry when a target changes. |
 | D19 | 2026-11-11 | `personas lint` aggregates all contract errors across all files rather than failing on the first error, exiting 1 on validation failure. `personas scaffold <id>` generates complete, valid contracts with a `plugin.<id>.placeholder` check so they pass lint immediately without duplicating ownership of built-in checks; lint treats these matching placeholders as advisory warnings. | Halting on the first file error forces tedious fix-and-rerun loops. Using a namespaced placeholder allows scaffolding a valid contract into an existing repo where all built-in checks are already claimed, keeping disjoint ownership invariant while avoiding false-positive errors. | When plugin authoring is expanded, allow `scaffold` to generate a companion plugin stub or register the placeholder in local dev configs. |
 | D20 | 2026-11-11 | QH-014 publishes 14 labeled calibration fixtures and a `calibrate` CLI command; the current `weighted-coverage-v1` weights, penalties, and caps are retained without changes. | The fixtures make score behavior auditable and document two intentional disagreements (blocked coverage and static-only scope), but no fixture evidence currently justifies changing the published formula. | Revisit weights only if a labeled historical-outcome corpus shows systematic disagreement. |
+| D21 | 2026-11-12 | Usage metering is a versioned JSON Lines contract (`quality-harness.metering/v1`) with a frozen event name set and an idempotency key on every event. OSS runs write the same events to `.harness/metering/events.jsonl`; workspace defaults to `local` and source to `oss`. | A local file sink proves the billing contract without a cloud account, while idempotency lets a future delivery layer retry safely. Keeping metering separate from operational `events.jsonl` prevents audit logs from becoming billing records. | Add a cloud sink adapter in `QH-024`; any new billable action needs a new schema version or a frozen v1 addendum, never a silent rename. |

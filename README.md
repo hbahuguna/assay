@@ -64,6 +64,11 @@ python -m harness verify-report --root .harness-demo --signature .harness-demo/.
 python -m harness run --target examples/sample-repo --no-browser \
   --fail-on-score-regression 5 --root .harness-demo
 
+# Emit the canonical usage events to a custom local sink.
+python -m harness run --target examples/sample-repo --no-browser \
+  --workspace local --metering-sink .harness-demo/usage.jsonl \
+  --root .harness-demo
+
 # Suppress a known finding baseline with an owner and expiry.
 python -m harness suppress add <fingerprint> \
   --owner alice --reason "accepted risk" --ticket T-1 \
@@ -218,6 +223,39 @@ Pruning removes both the history entry and the run's evidence directory. The
 latest run, the latest completed run, and every halted run are always retained.
 The current `progress.json` and `report.json` are never removed by pruning.
 
+### Usage metering events
+
+Every local run emits the same versioned usage events that a cloud deployment
+will forward to its ledger. The default sink is
+`.harness/metering/events.jsonl`; override it with `--metering-sink`, or set the
+workspace with `--workspace` (default: `local`).
+
+```bash
+python -m harness run --target examples/sample-repo --no-browser \
+  --workspace local --root .harness-demo
+
+head -n 1 .harness-demo/.harness/metering/events.jsonl
+```
+
+The v1 event names are frozen:
+
+- `run_started` — one unit `run`.
+- `check_executed` — one unit `check`.
+- `browser_minute_consumed` — a positive `browser_minute` quantity.
+- `evidence_byte_stored` — the stored artifact size in `byte`.
+- `export_generated` — one unit `export` for SARIF, JUnit, and signature exports.
+
+Every event includes `workspace`, `run`, `quantity`, `unit`, `timestamp`, and
+`source`, plus `event_id`, `event_type`, `idempotency_key`, and event-specific
+`metadata`. Duplicate delivery with the same idempotency key is ignored. The
+normative JSON Schemas live under `schemas/metering/`: one envelope schema and
+one schema per event type. `harness.metering.validate_event` performs the same
+checks without adding a runtime dependency.
+
+A run report includes a `metering` summary with the sink, workspace, event count,
+and per-type counts. Metering events are operational usage records, not pricing
+or billing policy; the OSS core remains unlimited and account-free.
+
 ### Live browser checks
 
 ```bash
@@ -289,6 +327,8 @@ to keep the run's evidence set unchanged.
 - `workflow`: id, name, version, and the canonical phase order that ran.
 - `confidence`: score, band, coverage, limitations, penalties, domain scores,
   formula breakdown, and gate reasons.
+- `metering`: the v1 usage-event sink, workspace, total event count, and counts
+  by event type. Events themselves live in the file sink, not the report.
 - `findings`: severity, consequence, location, reproduction, evidence,
   remediation, verification, fingerprint, and owning persona.
 - `invalid_findings`: quarantined findings with the owning persona, check id,
@@ -401,6 +441,7 @@ findings from one persona mark that persona `degraded`.
 
 ```text
 harness/            Core engine, CLI, checks, plugins, evidence, scoring, browser layer
+schemas/metering/   Versioned usage-event envelope and per-event JSON Schemas
 personas/           Specialist Markdown contracts
 tests/              Unit and end-to-end tests (unittest compatible)
 examples/sample-repo/  Static fixture with a high, medium, and low finding
@@ -433,6 +474,6 @@ python -m pytest
 - Automated accessibility checks do not establish WCAG conformance.
 - Security checks are bounded and non-destructive; they are not a penetration
   test or a certification.
-- The OSS harness has no multi-tenancy, metering, or billing. That is the next
-  business epic on `BOARD.md`, and it is intentionally separated from the
-  deterministic core.
+- The OSS harness has no multi-tenancy, quota, or billing. It emits canonical
+  usage events to a local sink; workspace authentication, quota, and billing
+  remain cloud-epic work on `BOARD.md`.

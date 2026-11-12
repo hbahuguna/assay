@@ -18,6 +18,7 @@ from .calibration import run_calibration, write_calibration_report
 from .errors import HarnessError, PersonaError
 from .exports import build_junit, build_sarif, sign_report, verify_report_signature
 from .exports import build_junit, build_sarif, sign_report, verify_report_signature
+from .metering import EVENT_EXPORT_GENERATED, MeteringEmitter
 from .models import CheckStatus, Severity, severity_rank, utc_now
 from .orchestrator import Orchestrator, RunOptions
 from .personas import lint_personas, load_personas, scaffold_persona
@@ -110,6 +111,15 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--generated-at",
         help="Override the report generated_at timestamp with an ISO-8601 value.",
+    )
+    run.add_argument(
+        "--workspace",
+        default="local",
+        help="Workspace id recorded on usage events (default: local for OSS).",
+    )
+    run.add_argument(
+        "--metering-sink",
+        help="Path to the usage-event JSON Lines sink (default: .harness/metering/events.jsonl).",
     )
     run.add_argument("--resume", action="store_true", help="Resume the last incomplete run.")
     run.add_argument(
@@ -289,6 +299,8 @@ def _run(args: argparse.Namespace) -> int:
         clock_mode=args.clock_mode,
         frozen_clock=args.frozen_clock,
         generated_at=args.generated_at,
+        workspace=args.workspace,
+        metering_sink=args.metering_sink,
     )
 
     def log(message: str) -> None:
@@ -540,6 +552,49 @@ def _calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _metering_emitter_for_report(store: StateStore, report: Dict[str, Any]) -> Optional[MeteringEmitter]:
+    run_id = str(report.get("run_id", "")).strip()
+    if not run_id:
+        return None
+    info = report.get("metering", {})
+    if not isinstance(info, dict):
+        info = {}
+    sink_value = str(info.get("sink", "") or "").strip()
+    sink = Path(sink_value).expanduser() if sink_value else None
+    return MeteringEmitter(
+        store.root,
+        run_id,
+        workspace=str(info.get("workspace", "local") or "local"),
+        sink=sink,
+    )
+
+
+def _emit_export(
+    store: StateStore,
+    report: Dict[str, Any],
+    export_format: str,
+    output: str,
+) -> None:
+    try:
+        emitter = _metering_emitter_for_report(store, report)
+        if emitter is None:
+            return
+        emitter.emit(
+            EVENT_EXPORT_GENERATED,
+            1,
+            "export",
+            idempotency_key="{}:{}:{}:{}".format(
+                report.get("run_id", ""), EVENT_EXPORT_GENERATED, export_format, output
+            ),
+            metadata={"format": export_format, "output": output},
+        )
+    except Exception as exc:
+        print(
+            "[quality-harness] WARNING: export metering event could not be written: {}".format(exc),
+            file=sys.stderr,
+        )
+
+
 def _read_key(value: str) -> str:
     path = Path(value).expanduser()
     if path.is_file():
@@ -557,8 +612,10 @@ def _sarif(args: argparse.Namespace) -> int:
             output_path = Path.cwd() / output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(sarif, indent=2, ensure_ascii=False), encoding="utf-8")
+        _emit_export(store, report, "sarif", str(output_path))
         _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
     else:
+        _emit_export(store, report, "sarif", "stdout")
         _print_json(sarif)
     return 0
 
@@ -573,8 +630,10 @@ def _junit(args: argparse.Namespace) -> int:
             output_path = Path.cwd() / output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(xml_text, encoding="utf-8")
+        _emit_export(store, report, "junit", str(output_path))
         _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
     else:
+        _emit_export(store, report, "junit", "stdout")
         print(xml_text)
     return 0
 
@@ -588,6 +647,7 @@ def _sign_report(args: argparse.Namespace) -> int:
         output_path = Path.cwd() / output_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(signature, encoding="utf-8")
+    _emit_export(store, report, "signature", str(output_path))
     _print_json(
         {
             "schema_version": REPORT_SCHEMA,
@@ -627,8 +687,10 @@ def _sarif(args: argparse.Namespace) -> int:
             output_path = Path.cwd() / output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(sarif, indent=2, ensure_ascii=False), encoding="utf-8")
+        _emit_export(store, report, "sarif", str(output_path))
         _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
     else:
+        _emit_export(store, report, "sarif", "stdout")
         _print_json(sarif)
     return 0
 
@@ -643,8 +705,10 @@ def _junit(args: argparse.Namespace) -> int:
             output_path = Path.cwd() / output_path
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(xml_text, encoding="utf-8")
+        _emit_export(store, report, "junit", str(output_path))
         _print_json({"schema_version": REPORT_SCHEMA, "status": "written", "path": str(output_path)})
     else:
+        _emit_export(store, report, "junit", "stdout")
         print(xml_text)
     return 0
 
@@ -665,6 +729,7 @@ def _sign_report(args: argparse.Namespace) -> int:
         output_path = Path.cwd() / output_path
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(signature, encoding="utf-8")
+    _emit_export(store, report, "signature", str(output_path))
     _print_json(
         {
             "schema_version": REPORT_SCHEMA,

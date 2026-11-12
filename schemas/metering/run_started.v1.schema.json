@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quality-harness.dev/schemas/metering/run_started.v1.schema.json",
+  "title": "run_started usage event v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_type",
+    "idempotency_key",
+    "workspace",
+    "run",
+    "quantity",
+    "unit",
+    "timestamp",
+    "source",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "quality-harness.metering/v1"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "const": "run_started"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1
+    },
+    "run": {
+      "type": "string",
+      "minLength": 1
+    },
+    "quantity": {
+      "const": 1
+    },
+    "unit": {
+      "const": "run"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "workflow_id"
+      ],
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workflow_version": {
+          "type": "string"
+        },
+        "target_kind": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

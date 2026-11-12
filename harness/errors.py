@@ -37,3 +37,7 @@ class PluginError(CheckError):
 
 class PolicyError(HarnessError):
     pass
+
+
+class MeteringError(HarnessError):
+    pass

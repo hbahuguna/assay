@@ -133,6 +133,21 @@ def build_report(
         "score_delta": float(trend.get("score_delta", 0.0)),
         "coverage_delta": float(trend.get("coverage_delta", 0.0)),
     }
+    metering_info = state.options.get("metering", {}) if isinstance(state.options, dict) else {}
+    if not isinstance(metering_info, dict):
+        metering_info = {}
+    metering = {
+        "schema_version": str(
+            metering_info.get("schema_version", "quality-harness.metering/v1")
+        ),
+        "sink": str(metering_info.get("sink", ".harness/metering/events.jsonl")),
+        "workspace": str(metering_info.get("workspace", "local")),
+        "event_count": int(metering_info.get("event_count", 0)),
+        "event_types": {
+            str(key): int(value)
+            for key, value in dict(metering_info.get("event_types", {})).items()
+        },
+    }
     personas = []
     for persona in state.personas:
         entry = dict(persona)
@@ -217,6 +232,7 @@ def build_report(
         "target": state.target.to_dict(),
         "intent": state.intent,
         "policy": {"id": policy_id, "version": policy_version},
+        "metering": metering,
         "decision": decision,
         "trend": trend,
         "confidence": state.confidence.to_dict(),

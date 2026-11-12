@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .models import CheckStatus, utc_now
+from .metering import EVENT_EVIDENCE_BYTE_STORED
 
 
 def _slug(value: str, fallback: str = "artifact") -> str:
@@ -42,9 +43,11 @@ def sha256_file(path: Path) -> str:
 
 
 class EvidenceStore:
-    def __init__(self, root: Path, run_id: str) -> None:
+    def __init__(self, root: Path, run_id: str, metering: Any = None) -> None:
         self.root = Path(root).resolve()
         self.run_id = run_id
+        self.metering = metering
+        self.metering_errors: List[str] = []
         self.run_dir = self.root / ".harness" / "evidence" / run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.manifest_path = self.run_dir / "manifest.json"
@@ -109,6 +112,27 @@ class EvidenceStore:
         # Replacing the same logical artifact keeps the manifest small.
         self.entries = [item for item in self.entries if item.get("path") != entry["path"]]
         self.entries.append(entry)
+        if self.metering is not None:
+            try:
+                self.metering.emit(
+                    EVENT_EVIDENCE_BYTE_STORED,
+                    quantity=int(entry.get("bytes", 0)),
+                    unit="byte",
+                    idempotency_key="{}:{}:{}:{}".format(
+                        self.run_id,
+                        EVENT_EVIDENCE_BYTE_STORED,
+                        entry.get("path", ""),
+                        entry.get("sha256", ""),
+                    ),
+                    metadata={
+                        "kind": entry.get("kind", ""),
+                        "path": entry.get("path", ""),
+                        "sha256": entry.get("sha256", ""),
+                        "check_id": entry.get("check_id", ""),
+                    },
+                )
+            except Exception as exc:  # Metering must not discard stored evidence.
+                self.metering_errors.append(str(exc))
         return entry["path"]
 
     def save_text(

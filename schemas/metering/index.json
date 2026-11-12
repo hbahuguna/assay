@@ -1,0 +1,11 @@
+{
+  "schema_version": "quality-harness.metering.schemas/v1",
+  "envelope": "envelope.v1.schema.json",
+  "events": {
+    "run_started": "run_started.v1.schema.json",
+    "check_executed": "check_executed.v1.schema.json",
+    "browser_minute_consumed": "browser_minute_consumed.v1.schema.json",
+    "evidence_byte_stored": "evidence_byte_stored.v1.schema.json",
+    "export_generated": "export_generated.v1.schema.json"
+  }
+}
