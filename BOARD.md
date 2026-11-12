@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-028 - Publish a signed PyPI package and container image
-
-- **Epic:** E6 Developer Experience and Integrations
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-001
-- **Status:** Ready
-- **Description:** Add a release workflow that builds an sdist, wheel, and
-  minimal container image, signs them, publishes provenance, and verifies the
-  installed CLI from a clean environment.
-- **Acceptance Criteria:**
-  - `pip install quality-harness` exposes the `quality-harness` command.
-  - Artifacts carry signatures and provenance attestations.
-  - A clean container can run the static fixture without extra packages.
-  - The browser image is separate and documented.
-  - A bad signature fails the release job.
-
 ### QH-029 - Add a GitHub Action with PR comment and status check
 
 - **Epic:** E6 Developer Experience and Integrations
@@ -299,8 +282,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-027` are complete, so `QH-028` is now
-the lowest-numbered unblocked task. `QH-028` continues the
+No task is claimed. `QH-001` through `QH-028` are complete, so `QH-029` is now
+the lowest-numbered unblocked task. `QH-029` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1029,6 +1012,32 @@ commercial-critical-path chain.
   `.github/workflows/billing-coverage.yml`. Full suite: 224 passing tests with
   Python 3.11. `BOARD.md` D29 records the regression-test decision.
 
+### QH-028 - Publish a signed PyPI package and container image
+
+- **Epic:** E6 Developer Experience and Integrations
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-001
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `Dockerfile`, `Dockerfile.browser`, and
+  `.github/workflows/release.yml`. The release workflow builds an sdist and
+  wheel, signs them with Sigstore, attests provenance, verifies signatures,
+  publishes to PyPI, builds/signs separate core and browser container images,
+  and smoke-tests the installed CLI. `pyproject.toml` already exposes the
+  `quality-harness` console script.
+- **Acceptance Criteria:**
+  - `pip install quality-harness` exposes the `quality-harness` command.
+  - Artifacts carry signatures and provenance attestations.
+  - A clean container can run the static fixture without extra packages.
+  - The browser image is separate and documented.
+  - A bad signature fails the release job.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_packaging -v`
+- **Evidence:** `tests/test_packaging.py`, `Dockerfile`,
+  `Dockerfile.browser`, and `.github/workflows/release.yml`. Full suite:
+  229 passing tests with Python 3.11. `README.md` and `BOARD.md` D30 document
+  the release contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1082,3 +1091,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D27 | 2026-11-12 | Cloud runs are queued in `.harness/cloud/queue.json` and execute in per-tenant roots under `.harness/tenants/<workspace>/`. Job records expose only owner-scoped fields; cross-tenant lookups return no data. Cancellation writes the tenant `.harness/KILL` file so the existing orchestrator kill switch stops remaining checks and preserves partial evidence. Crashed running jobs are recovered to queued and retried; retry uses persisted state and metering idempotency keys to avoid double billing. Queue metrics expose depth, status counts, and run durations. | Reusing the deterministic orchestrator keeps phase order, evidence, scoring, and kill behavior unchanged. Separate tenant roots provide filesystem isolation, while owner checks in the queue API prevent job metadata leakage. Idempotent metering keys make retries safe. | Add true process-level workers, sandboxed filesystem namespaces, and cancellation tokens if stronger isolation is required; add queue-depth alerting and retention in `QH-026`. |
 | D28 | 2026-11-12 | Tenant retention is an explicit per-workspace policy (default 30 days) with soft deletion for a grace period and auditable hard deletion. Exports are ZIP archives containing tenant state/evidence and filtered central records, plus a signed manifest of SHA-256 hashes. Hard deletion removes tenant roots, queue jobs, cached exports, billing/quota state, and signup records, while appending an audit record. | Explicit retention and grace periods prevent accidental data loss. Signed manifests make export tampering detectable and keep exports scoped to one tenant. Leaving an audit trail after hard deletion preserves accountability without retaining tenant data. | Add scheduled retention enforcement, encrypted archives, and GDPR-style deletion certificates when the cloud control plane lands. |
 | D29 | 2026-11-12 | Billing regression coverage is table-driven over free/pro/enterprise plans and exercises upgrades, downgrades, cancellation, failed payments, feature-flag denial, and unexpected provider calls using the local sandbox fake. A dedicated GitHub Actions workflow runs only the billing tests under `coverage` and uploads the report. | Table-driven tests make plan behavior auditable and prevent silent drift when limits change. The local fake keeps tests deterministic and network-free, while the coverage workflow makes billing regressions visible in CI. | Expand the table when new tiers are added; add provider-specific contract tests when sandbox credentials become available. |
+| D30 | 2026-11-12 | Releases use a GitHub Actions workflow that builds an sdist/wheel, signs artifacts with Sigstore, attests provenance, verifies signatures before publishing, publishes to PyPI with trusted publishing, and builds/signs separate core and browser container images. The core image contains no Playwright; the browser image is based on the Playwright Python image. A bad signature fails the verification job before publication. | Sigstore keyless signing and GitHub artifact attestations provide supply-chain evidence without managing long-lived signing keys. Separate images keep the deterministic core small while making browser support explicit. | Add SBOM generation and container vulnerability scanning before the first public release. |

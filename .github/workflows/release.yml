@@ -1,0 +1,204 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  packages: write
+
+jobs:
+  build:
+    name: Build signed Python artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build sigstore
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Sign artifacts with Sigstore
+        run: python -m sigstore sign dist/*
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "dist/*"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-release-artifacts
+          path: dist/*
+          if-no-files-found: error
+
+  verify-signatures:
+    name: Verify artifact signatures
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-release-artifacts
+          path: dist
+
+      - name: Install Sigstore
+        run: python -m pip install sigstore
+
+      - name: Verify every artifact signature
+        run: |
+          set -euo pipefail
+          for artifact in dist/*; do
+            case "$artifact" in
+              *.sig|*.crt) continue ;;
+            esac
+            python -m sigstore verify identity \
+              --identity-regexp 'https://github.com/hbahuguna/assay/.github/workflows/release.yml@refs/tags/.*' \
+              --issuer 'https://token.actions.githubusercontent.com' \
+              "$artifact"
+          done
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build, verify-signatures]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/quality-harness
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-release-artifacts
+          path: dist
+
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  build-core-image:
+    name: Build and sign core container image
+    needs: [build, verify-signatures]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/quality-harness
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push core image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign core image
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes ${{ steps.meta.outputs.tags }}
+
+  build-browser-image:
+    name: Build and sign browser container image
+    needs: [build, verify-signatures]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/quality-harness-browser
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push browser image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.browser
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign browser image
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes ${{ steps.meta.outputs.tags }}
+
+  verify-release:
+    name: Verify installed package and container smoke test
+    needs: [publish-pypi, build-core-image]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install published package
+        run: python -m pip install quality-harness
+
+      - name: Verify CLI entrypoint
+        run: quality-harness --version
+
+      - name: Run static fixture from installed package
+        run: |
+          git clone https://github.com/hbahuguna/assay.git /tmp/assay
+          quality-harness run \
+            --target /tmp/assay/examples/sample-repo \
+            --no-browser \
+            --personas-dir /tmp/assay/personas \
+            --root /tmp/quality-harness-smoke
+          test -f /tmp/quality-harness-smoke/.harness/report.json

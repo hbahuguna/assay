@@ -1,0 +1,14 @@
+FROM mcr.microsoft.com/playwright/python:v1.49.0-jammy
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY harness ./harness
+COPY personas ./personas
+COPY schemas ./schemas
+COPY examples ./examples
+
+RUN python -m pip install --no-cache-dir ".[browser]"
+
+ENTRYPOINT ["quality-harness"]
+CMD ["--version"]

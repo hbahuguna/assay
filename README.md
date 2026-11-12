@@ -495,6 +495,18 @@ Hard deletion removes tenant roots, queue records, cached exports, billing and
 quota state, and signup records while preserving an audit log. Archives are
 verified with `verify_export`.
 
+### Signed releases and containers
+
+The `quality-harness` console script is declared in `pyproject.toml`. Release
+artifacts are built, signed with Sigstore, and attested in
+`.github/workflows/release.yml`. The core container image is `Dockerfile`; the
+browser image is `Dockerfile.browser`.
+
+```bash
+docker build -t quality-harness .
+docker build -f Dockerfile.browser -t quality-harness-browser .
+```
+
 ### Live browser checks
 
 ```bash
