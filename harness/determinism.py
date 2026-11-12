@@ -87,9 +87,9 @@ class RealEntropy:
 class SeededEntropy:
     """Deterministic SHA-256 based entropy, independent of Python's PRNG."""
 
-    def __init__(self, seed: int) -> None:
+    def __init__(self, seed: int, counter: int = 0) -> None:
         self._seed = str(seed)
-        self._counter = 0
+        self._counter = max(0, int(counter or 0))
 
     def hex_chars(self, length: int) -> str:
         if length <= 0:
@@ -136,6 +136,7 @@ def make_determinism(
     seed: Optional[int] = None,
     clock_mode: str = "real",
     frozen_clock: object = None,
+    entropy_counter: int = 0,
 ) -> Determinism:
     if clock_mode not in CLOCK_MODES:
         raise HarnessError("clock_mode must be one of: real, frozen")
@@ -152,7 +153,11 @@ def make_determinism(
         if frozen_clock is not None:
             raise HarnessError("frozen_clock requires clock_mode 'frozen'")
         clock = RealClock()
-    entropy = SeededEntropy(seed) if seed is not None else RealEntropy()
+    entropy = (
+        SeededEntropy(seed, counter=entropy_counter)
+        if seed is not None
+        else RealEntropy()
+    )
     return Determinism(clock=clock, entropy=entropy, seed=seed, clock_mode=clock_mode)
 
 

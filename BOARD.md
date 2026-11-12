@@ -138,32 +138,9 @@ into a false release signal.
 
 ## Ready
 
-### QH-036 - Continue seeded id sequences across resume
-
-- **Epic:** E1 Deterministic Core Engine
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-004
-- **Status:** Ready
-- **Description:** Persist the seeded id sequence position and the determinism
-  options with the run and restore them on resume so a resumed deterministic run
-  cannot reuse a finding id or mix clocks and seeds.
-- **Acceptance Criteria:**
-  - A resumed seeded run continues the deterministic id sequence from the saved
-    position instead of restarting it.
-  - Resume with a different seed or clock mode either restores the saved options
-    or fails with a typed `StateError`.
-  - Existing finding ids and evidence remain byte-identical after resume.
-  - The progress and report record the sequence position or a resume-specific
-    entropy salt.
-  - Tests cover resume after partial execution and compare ids with a fresh
-    same-seed run.
-
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-035` are complete, so `QH-036` is now
-the lowest-numbered unblocked task. `QH-036` continues the
-commercial-critical-path chain.
+No task is claimed. `QH-001` through `QH-036` are complete.
 
 ## Blockers
 
@@ -1087,6 +1064,33 @@ commercial-critical-path chain.
 - **Evidence:** `tests/test_resume_registry.py`. Full suite: 265 passing tests
   with Python 3.11. `BOARD.md` D37 records the resume-guard decision.
 
+### QH-036 - Continue seeded id sequences across resume
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-004
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Persisted the seeded entropy counter and determinism options
+  with the run. Resume restores the saved seed, clock mode, frozen clock, and id
+  sequence position, so a resumed deterministic run continues generating ids
+  instead of restarting the sequence. Failed or changed options cannot mix seeds
+  or clocks.
+- **Acceptance Criteria:**
+  - A resumed seeded run continues the deterministic id sequence from the saved
+    position instead of restarting it.
+  - Resume with a different seed or clock mode either restores the saved options
+    or fails with a typed `StateError`.
+  - Existing finding ids and evidence remain byte-identical after resume.
+  - The progress and report record the sequence position or a resume-specific
+    entropy salt.
+  - Tests cover resume after partial execution and compare ids with a fresh
+    same-seed run.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_seeded_resume -v`
+- **Evidence:** `tests/test_seeded_resume.py`. Full suite: 269 passing tests
+  with Python 3.11. `BOARD.md` D38 records the determinism-resume decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1148,3 +1152,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D35 | 2026-11-12 | URL targets are validated before navigation by resolving DNS and rejecting loopback, private, link-local, metadata, multicast, and reserved addresses unless an explicit CIDR or hostname allowlist permits them. Allowlists load from `.harness/ssrf-allowlist.json`, a config path, or `QH_SSRF_ALLOWLIST`; they are not a blanket bypass flag. Redirect chains and browser navigation are re-validated, and DNS rebinding is covered by tests. Target errors do not include resolved internal IPs. | SSRF protection must fail closed by default while still allowing local CI servers through documented configuration. Re-validating redirects closes a common bypass. Keeping internal addresses out of errors prevents information disclosure in reports and logs. | Add DNS pinning/proxy controls and IPv6 coverage expansion when browser execution moves to isolated workers. |
 | D36 | 2026-11-12 | Failure injection is covered by deterministic tests: corrupt `progress.json` raises a typed `StateError` without overwriting the last good file; a failed evidence write yields zero-confidence, non-shipping report; kill during evidence collection records a halted hold report; and a truncated manifest fails evidence verification. Recovery is documented as restoring the last good progress file or rerunning after fixing the underlying failure. | Failing closed prevents a partial or corrupted run from claiming confidence. Keeping the corrupt file in place preserves forensic evidence, while hold reports make kill behavior auditable. | Add disk-full and permission-denied injection once a cross-platform fault-injection helper is available. |
 | D37 | 2026-11-12 | Resume persists a SHA-256 registry fingerprint containing check ids, sources, blocked reasons, evaluator availability, and trust-key ids. A mismatch raises `StateError` before personas are loaded or any check is replayed, and failed resume attempts leave progress, report, and evidence byte-identical. | A changed evaluator or untrusted plugin must not be silently used for pending work. Comparing before persona validation prevents partial planning against a different registry. Keeping the failed attempt read-only preserves forensic evidence. | Add cryptographic signing of the registry fingerprint if plugin trust moves beyond HMAC. |
+| D38 | 2026-11-12 | Seeded runs persist `seed`, `clock_mode`, `frozen_clock`, and an `id_sequence` counter in run options. `make_determinism` accepts an `entropy_counter`, and the orchestrator saves the current counter with every state write. Resume restores those options before creating the determinism provider, so a resumed run continues the SHA-256 id sequence instead of restarting it. | Continuing the counter prevents finding-id collisions and makes resumed deterministic runs comparable to an uninterrupted run. Restoring clock and seed options prevents mixing determinism modes. Persisting the counter at each state save keeps partial runs recoverable. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent counters. |

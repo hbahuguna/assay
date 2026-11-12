@@ -188,12 +188,44 @@ class Orchestrator:
 
     # ------------------------------------------------------------------ public
     def run(self, resume: bool = False) -> RunState:
+        if resume:
+            try:
+                state = self.state_store.load()
+                self.options.seed = state.seed
+                self.options.clock_mode = state.clock_mode
+                if isinstance(state.options, dict):
+                    frozen_clock = state.options.get("frozen_clock", self.options.frozen_clock)
+                    if frozen_clock is not None:
+                        self.options.frozen_clock = frozen_clock
+                    self._resume_entropy_counter = int(
+                        state.options.get("id_sequence")
+                        or state.options.get("entropy_counter")
+                        or 0
+                    )
+            except Exception:
+                self._resume_entropy_counter = 0
+        else:
+            self._resume_entropy_counter = 0
         self.determinism = make_determinism(
             seed=self.options.seed,
             clock_mode=self.options.clock_mode,
             frozen_clock=self.options.frozen_clock,
+            entropy_counter=getattr(self, "_resume_entropy_counter", 0),
         )
         token = set_determinism(self.determinism)
+        # Persist the seeded counter whenever state is saved.
+        original_save = self.state_store.save
+
+        def _save_with_sequence(state: Any) -> None:
+            if state is not None and self.determinism is not None and self.determinism.seed is not None:
+                try:
+                    state.options["id_sequence"] = self.determinism.entropy._counter
+                    state.options["entropy_counter"] = self.determinism.entropy._counter
+                except Exception:
+                    pass
+            original_save(state)
+
+        self.state_store.save = _save_with_sequence
         try:
             return self._run(resume)
         finally:
@@ -476,6 +508,7 @@ class Orchestrator:
                 "seed": self.options.seed,
                 "clock_mode": self.options.clock_mode,
                 "generated_at": self.options.generated_at,
+                "frozen_clock": self.options.frozen_clock,
             },
             kill_switch=KillSwitch(armed=True, threshold=self.options.kill_on),
             seed=self.options.seed,
