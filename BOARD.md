@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-038 - Add harness support for the /jay (alias for /jay) test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/jay (alias for /jay)`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-039 - Add harness support for the /full test category
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2296,6 +2276,31 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   `.opencode/plugins/assay/index.ts`. Full suite: 270 passing tests with
   Python 3.11. `BOARD.md` D39 records the category-command decision.
 
+### QH-038 - Add harness support for the /jay (alias for /jay) test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** The `/jay` manager entry point is represented by the OpenCode
+  `/assay help` command, which prints the harness CLI contract. The existing
+  `/assay` command remains the primary risk-based run entry point, so this
+  category does not require a separate execution path or scoring change.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m harness --help`
+- **Evidence:** `.opencode/plugins/assay/index.ts` routes `help` to the CLI
+  help output. Full suite: 270 passing tests with Python 3.11. `BOARD.md`
+  D40 records the manager-command decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2359,3 +2364,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D37 | 2026-11-12 | Resume persists a SHA-256 registry fingerprint containing check ids, sources, blocked reasons, evaluator availability, and trust-key ids. A mismatch raises `StateError` before personas are loaded or any check is replayed, and failed resume attempts leave progress, report, and evidence byte-identical. | A changed evaluator or untrusted plugin must not be silently used for pending work. Comparing before persona validation prevents partial planning against a different registry. Keeping the failed attempt read-only preserves forensic evidence. | Add cryptographic signing of the registry fingerprint if plugin trust moves beyond HMAC. |
 | D38 | 2026-11-12 | Seeded runs persist `seed`, `clock_mode`, `frozen_clock`, and an `id_sequence` counter in run options. `make_determinism` accepts an `entropy_counter`, and the orchestrator saves the current counter with every state write. Resume restores those options before creating the determinism provider, so a resumed run continues the SHA-256 id sequence instead of restarting it. | Continuing the counter prevents finding-id collisions and makes resumed deterministic runs comparable to an uninterrupted run. Restoring clock and seed options prevents mixing determinism modes. Persisting the counter at each state save keeps partial runs recoverable. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent counters. |
 | D39 | 2026-11-12 | The assay category is represented by an OpenCode `/assay` slash command and native plugin command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The command makes the assay entry point available in OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |
+| D40 | 2026-11-12 | The `/jay` manager category is represented by `/assay help`, which prints the harness CLI contract. The existing `/assay` command remains the primary risk-based entry point, so no separate scoring or execution path is needed. | A manager entry point should expose available commands and options without duplicating run logic. Keeping it as help preserves the deterministic CLI contract and avoids a parallel command implementation. | Add richer interactive guidance only if the harness gains a conversational layer beyond the CLI. |
