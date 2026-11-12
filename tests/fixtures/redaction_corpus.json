@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "description": "Synthetic credential shapes used only for redaction regression tests. None of these values are real.",
+  "entries": [
+    {
+      "id": "private-key-header",
+      "value": "-----BEGIN PRIVATE KEY-----"
+    },
+    {
+      "id": "aws-access-key",
+      "value": "AKIAIOSFODNN7EXAMPLE"
+    },
+    {
+      "id": "github-token",
+      "value": "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+    },
+    {
+      "id": "slack-token",
+      "value": "xoxb-EXAMPLE-EXAMPLE-EXAMPLETOKENVALUE"
+    },
+    {
+      "id": "google-api-key",
+      "value": "AIzaSyA1234567890abcdefghijklmnopqrstuv"
+    },
+    {
+      "id": "jwt",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+    },
+    {
+      "id": "generic-password",
+      "value": "password = \"SuperSecretPassword123!\""
+    },
+    {
+      "id": "generic-token",
+      "value": "token = \"abcdefghijklmnopqrstuvwxyz0123456789\""
+    },
+    {
+      "id": "generic-api-key",
+      "value": "api_key = \"sk_test_not_a_real_key_1234567890\""
+    },
+    {
+      "id": "generic-secret",
+      "value": "secret: \"not-a-real-secret-value-1234567890\""
+    },
+    {
+      "id": "generic-client-secret",
+      "value": "client_secret = \"not-a-real-client-secret-1234567890\""
+    },
+    {
+      "id": "generic-access-key",
+      "value": "access_key = \"not-a-real-access-key-1234567890\""
+    },
+    {
+      "id": "generic-passwd",
+      "value": "passwd = \"not-a-real-passwd-1234567890\""
+    },
+    {
+      "id": "bearer-header",
+      "value": "Authorization: Bearer not-a-real-bearer-token-1234567890"
+    },
+    {
+      "id": "cookie-value",
+      "value": "sessionid=not-a-real-cookie-value-1234567890"
+    },
+    {
+      "id": "basic-auth",
+      "value": "Authorization: Basic bm90LWEtcmVhbC11c2VyOm5vdC1hLXJlYWwtcGFzcw=="
+    },
+    {
+      "id": "connection-string",
+      "value": "postgres://user:not-a-real-password@db.example.com/app"
+    },
+    {
+      "id": "slack-webhook",
+      "value": "https://hooks.slack.com/services/T00000000/B00000000/NOTAREALWEBHOOKTOKEN"
+    },
+    {
+      "id": "npm-token",
+      "value": "npm_notarealtoken0123456789abcdef"
+    },
+    {
+      "id": "pypi-token",
+      "value": "pypi-not-a-real-token-abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "id": "openai-style-key",
+      "value": "sk-notarealkey0123456789abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "id": "azure-storage-key",
+      "value": "AccountKey=notarealazurestoragekey0123456789+/=="
+    },
+    {
+      "id": "jwt-bearer",
+      "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.notarealsignaturevalue"
+    },
+    {
+      "id": "ssh-private-key",
+      "value": "-----BEGIN OPENSSH PRIVATE KEY-----"
+    }
+  ]
+}

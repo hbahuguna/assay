@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-031 - Add a redaction regression corpus
-
-- **Epic:** E7 Hardening, Privacy, and Reliability
-- **Priority:** P0
-- **Points:** 3
-- **Depends on:** None
-- **Status:** Ready
-- **Description:** Create a corpus of synthetic secrets, tokens, cookies, URLs,
-  and headers and assert that none reach state, evidence, logs, or reports in
-  raw form.
-- **Acceptance Criteria:**
-  - The corpus covers at least 20 credential and token shapes.
-  - Every artifact produced by a fixture run is scanned for corpus values.
-  - A deliberately broken redactor fails the test.
-  - The corpus is clearly synthetic and safe to commit.
-  - Redaction failures never print the original value in the failure message.
-
 ### QH-032 - Sign evidence manifests and alert on tamper
 
 - **Epic:** E7 Hardening, Privacy, and Reliability
@@ -250,8 +233,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-030` are complete, so `QH-031` is now
-the lowest-numbered unblocked task. `QH-031` continues the
+No task is claimed. `QH-001` through `QH-031` are complete, so `QH-032` is now
+the lowest-numbered unblocked task. `QH-032` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1056,6 +1039,30 @@ commercial-critical-path chain.
   Full suite: 238 passing tests with Python 3.11. `BOARD.md` D32 records the
   contract decision.
 
+### QH-031 - Add a redaction regression corpus
+
+- **Epic:** E7 Hardening, Privacy, and Reliability
+- **Priority:** P0
+- **Points:** 3
+- **Depends on:** None
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `tests/fixtures/redaction_corpus.json` with 25 synthetic
+  credential shapes and `tests/test_redaction_corpus.py`. The tests run a
+  fixture through the orchestrator, scan every artifact for raw corpus values,
+  verify a broken redactor leaks a value, and keep corpus values out of failure
+  messages.
+- **Acceptance Criteria:**
+  - The corpus covers at least 20 credential and token shapes.
+  - Every artifact produced by a fixture run is scanned for corpus values.
+  - A deliberately broken redactor fails the test.
+  - The corpus is clearly synthetic and safe to commit.
+  - Redaction failures never print the original value in the failure message.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_redaction_corpus -v`
+- **Evidence:** `tests/test_redaction_corpus.py` and
+  `tests/fixtures/redaction_corpus.json`. Full suite: 241 passing tests with
+  Python 3.11. `BOARD.md` D33 records the redaction decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1112,3 +1119,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D30 | 2026-11-12 | Releases use a GitHub Actions workflow that builds an sdist/wheel, signs artifacts with Sigstore, attests provenance, verifies signatures before publishing, publishes to PyPI with trusted publishing, and builds/signs separate core and browser container images. The core image contains no Playwright; the browser image is based on the Playwright Python image. A bad signature fails the verification job before publication. | Sigstore keyless signing and GitHub artifact attestations provide supply-chain evidence without managing long-lived signing keys. Separate images keep the deterministic core small while making browser support explicit. | Add SBOM generation and container vulnerability scanning before the first public release. |
 | D31 | 2026-11-12 | PR automation is a composite GitHub Action plus a fork-safe workflow. The Action runs the harness, uploads evidence, exposes score/decision/coverage outputs, and posts or updates one marker-based comment. Comment writes are skipped when the GitHub context is unavailable, so fork pull requests can run with read-only permissions. The workflow passes `--fail-on` and `--min-score` directly to the harness. | Reusing the machine-first CLI keeps the PR summary derived from the same JSON report as CI. A single marker comment avoids duplicate noise, and read-only permissions prevent secret exposure on forked pull requests. | Add check-run annotations and changed-file scoping in a later integration task. |
 | D32 | 2026-11-12 | The report contract is published as `schemas/report/report.v1.schema.json` and checked by `harness.report.report_schema()` and `validate_report()`. The schema requires all current top-level fields, types additive optional fields, and is staged as a release artifact. Completed and halted reports both validate. | A published JSON Schema lets downstream consumers validate reports without importing the harness. Checking it in tests prevents silent contract drift. Allowing additional properties preserves backward-compatible evolution. | Generate the schema directly from the report builder if the field set grows beyond manual maintenance. |
+| D33 | 2026-11-12 | Redaction is proven by a 25-shape synthetic corpus stored in `tests/fixtures/redaction_corpus.json`. A fixture run is executed and every artifact under `.harness/` is scanned for each raw value. The test also monkeypatches the redactor to an identity function and requires a leak, while failure messages never include the original value. | A committed synthetic corpus makes redaction regressions reproducible and reviewable. Scanning all artifacts catches leaks in state, evidence, reports, logs, and metering. The broken-redactor assertion ensures the test would fail if redaction stopped working. | Extend the corpus as new redaction patterns are added; add browser-capture redaction cases when Playwright is available in CI. |
