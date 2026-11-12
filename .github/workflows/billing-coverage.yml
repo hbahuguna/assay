@@ -1,0 +1,38 @@
+name: Billing coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  billing-coverage:
+    name: Billing module coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and coverage
+        run: python -m pip install -e .[dev] coverage
+
+      - name: Run billing tests with coverage
+        run: |
+          coverage run -m unittest tests.test_billing tests.test_billing_regression -v
+          coverage report --include="harness/billing.py" --show-missing --fail-under=85
+          coverage xml --include="harness/billing.py" -o coverage-billing.xml
+
+      - name: Upload billing coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: billing-coverage
+          path: |
+            coverage-billing.xml
+            .coverage
+          if-no-files-found: error

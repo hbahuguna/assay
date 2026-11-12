@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-027 - Add billing sandbox and entitlement regression tests
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-024
-- **Status:** Ready
-- **Description:** Add deterministic tests for plan entitlements, quota
-  transitions, invoice reconciliation, and feature-flag behavior using a local
-  billing fake.
-- **Acceptance Criteria:**
-  - Every plan has a table-driven entitlement test.
-  - Upgrades, downgrades, cancellations, and failed payments are covered.
-  - Tests run without network access and fail on an unexpected provider call.
-  - CI publishes a coverage report for the billing module.
-
 ### QH-028 - Publish a signed PyPI package and container image
 
 - **Epic:** E6 Developer Experience and Integrations
@@ -315,8 +299,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-026` are complete, so `QH-027` is now
-the lowest-numbered unblocked task. `QH-027` continues the
+No task is claimed. `QH-001` through `QH-027` are complete, so `QH-028` is now
+the lowest-numbered unblocked task. `QH-028` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1022,6 +1006,29 @@ commercial-critical-path chain.
   with processed runs. Full suite: 215 passing tests with Python 3.11.
   `README.md` and `BOARD.md` D28 document the retention contract.
 
+### QH-027 - Add billing sandbox and entitlement regression tests
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-024
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `tests/test_billing_regression.py` with table-driven
+  entitlement tests for free/pro/enterprise plans, upgrade/downgrade handling,
+  cancellation, failed payments, feature-flag behavior, expired/wrong-scope
+  entitlement rejection, and unexpected provider-call detection. Added a
+  billing-coverage GitHub Actions workflow.
+- **Acceptance Criteria:**
+  - Every plan has a table-driven entitlement test.
+  - Upgrades, downgrades, cancellations, and failed payments are covered.
+  - Tests run without network access and fail on an unexpected provider call.
+  - CI publishes a coverage report for the billing module.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_billing tests.test_billing_regression -v`
+- **Evidence:** `tests/test_billing_regression.py` and
+  `.github/workflows/billing-coverage.yml`. Full suite: 224 passing tests with
+  Python 3.11. `BOARD.md` D29 records the regression-test decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1074,3 +1081,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D26 | 2026-11-12 | Metered billing is an explicit, off-by-default `BillingFeatureFlag` (`enabled`, `sandbox`, allow-listed workspaces) plus a separate billing kill switch. A sandbox provider implements the provider boundary and reconciles ledger invoices to the cent. Billing calls use idempotency keys, retry transient failures, and report `degraded` without changing run or quota state. Secrets are resolved through `SecretManager` implementations (environment, in-memory, or file) and never persisted in billing state. | Keeping billing behind both a feature flag and a kill switch lets the OSS core and runs remain available during provider outages. Reusing ledger invoices as the billing source of truth preserves auditability, while idempotency keys make retries safe. Secret references keep credentials out of state and logs. | Replace the sandbox provider with a real provider adapter in a later task; add webhook handling, tax, and provider invoice IDs when sandbox credentials are available. |
 | D27 | 2026-11-12 | Cloud runs are queued in `.harness/cloud/queue.json` and execute in per-tenant roots under `.harness/tenants/<workspace>/`. Job records expose only owner-scoped fields; cross-tenant lookups return no data. Cancellation writes the tenant `.harness/KILL` file so the existing orchestrator kill switch stops remaining checks and preserves partial evidence. Crashed running jobs are recovered to queued and retried; retry uses persisted state and metering idempotency keys to avoid double billing. Queue metrics expose depth, status counts, and run durations. | Reusing the deterministic orchestrator keeps phase order, evidence, scoring, and kill behavior unchanged. Separate tenant roots provide filesystem isolation, while owner checks in the queue API prevent job metadata leakage. Idempotent metering keys make retries safe. | Add true process-level workers, sandboxed filesystem namespaces, and cancellation tokens if stronger isolation is required; add queue-depth alerting and retention in `QH-026`. |
 | D28 | 2026-11-12 | Tenant retention is an explicit per-workspace policy (default 30 days) with soft deletion for a grace period and auditable hard deletion. Exports are ZIP archives containing tenant state/evidence and filtered central records, plus a signed manifest of SHA-256 hashes. Hard deletion removes tenant roots, queue jobs, cached exports, billing/quota state, and signup records, while appending an audit record. | Explicit retention and grace periods prevent accidental data loss. Signed manifests make export tampering detectable and keep exports scoped to one tenant. Leaving an audit trail after hard deletion preserves accountability without retaining tenant data. | Add scheduled retention enforcement, encrypted archives, and GDPR-style deletion certificates when the cloud control plane lands. |
+| D29 | 2026-11-12 | Billing regression coverage is table-driven over free/pro/enterprise plans and exercises upgrades, downgrades, cancellation, failed payments, feature-flag denial, and unexpected provider calls using the local sandbox fake. A dedicated GitHub Actions workflow runs only the billing tests under `coverage` and uploads the report. | Table-driven tests make plan behavior auditable and prevent silent drift when limits change. The local fake keeps tests deterministic and network-free, while the coverage workflow makes billing regressions visible in CI. | Expand the table when new tiers are added; add provider-specific contract tests when sandbox credentials become available. |
