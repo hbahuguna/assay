@@ -33,6 +33,10 @@ export default Plugin.define({
           let args: string[]
           if (tokens.length === 0) {
             args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas"]
+          } else if (tokens[0] === "--version" || tokens[0] === "-v") {
+            args = ["--version"]
+          } else if (tokens[0] === "--help" || tokens[0] === "-h") {
+            args = ["--help"]
           } else if (subcommands.has(tokens[0])) {
             args = tokens
           } else {
