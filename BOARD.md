@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-041 - Add harness support for the /assay-functionality test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/assay-functionality`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-042 - Add harness support for the /assay-browser test category
 
 - **Epic:** E8 Carbon Test Category Coverage

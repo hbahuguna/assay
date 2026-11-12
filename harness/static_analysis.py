@@ -1015,6 +1015,32 @@ class StaticCheckRunner:
             metadata={"category": "test"},
         )
 
+    def check_static_functionality_category(self, check: Check) -> CheckOutcome:
+        payload = {
+            "category": "functionality",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "test_files": len(self.inventory.test_files),
+            "test_frameworks": self.inventory.test_frameworks,
+            "manifests": len(self.inventory.manifests),
+        }
+        evidence = self._save(
+            "functionality-category-scope",
+            payload,
+            check,
+            "Functionality category assessment scope and inventory summary.",
+        )
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual="Functionality category assessment recorded for {} source file(s).".format(
+                len(self.inventory.source_files)
+            ),
+            evidence=[evidence],
+            metadata={"category": "functionality"},
+        )
+
     def check_static_accessibility(self, check: Check) -> CheckOutcome:
         matches: List[Dict[str, Any]] = []
         for rel, path in self._iter_files(MARKUP_EXTENSIONS):

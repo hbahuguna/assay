@@ -98,6 +98,7 @@ class RegistryTests(unittest.TestCase):
             - {
                 "static.full_assessment",
                 "static.test_category",
+                "static.functionality_category",
                 "browser.load",
                 "browser.console",
                 "browser.network",

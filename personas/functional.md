@@ -20,6 +20,7 @@ tools:
 checks:
   - static.full_assessment
   - static.test_category
+  - static.functionality_category
   - static.inventory
   - static.tests
   - static.ci
