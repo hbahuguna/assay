@@ -48,7 +48,7 @@ export default Plugin.define({
           const output = await runAssay(args, projectDirectory)
           await ctx.session.prompt({
             sessionID,
-            text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed if needed to investigate the findings.`,
+            text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results, then investigate the highest-severity findings. Inspect the cited files and run the most relevant tests or checks. Continue until you have a concrete verification result or a clear blocker. Additional commands are allowed and expected when needed.`,
           })
         },
       })
