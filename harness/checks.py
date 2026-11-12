@@ -37,6 +37,16 @@ CHECK_CATALOG: List[CheckDefinition] = [
         requires="any",
     ),
     CheckDefinition(
+        id="static.test_category",
+        title="Test category assessment scope is recorded",
+        domain="functional",
+        kind="static",
+        intent="Confirm that the test category assessment was requested and represented.",
+        expected="The run intent explicitly requests the test category and the planned scope is recorded as evidence.",
+        base_weight=0.5,
+        requires="any",
+    ),
+    CheckDefinition(
         id="static.inventory",
         title="Source and test inventory is complete and readable",
         domain="functional",
@@ -210,6 +220,11 @@ def _is_full_category_intent(intent: str) -> bool:
     return "full assessment" in text or "full category" in text or text.strip() == "full"
 
 
+def _is_test_category_intent(intent: str) -> bool:
+    text = (intent or "").lower()
+    return "assay test assessment" in text or "test category assessment" in text
+
+
 def _applicable(
     definition: CheckDefinition,
     inventory: Dict[str, Any],
@@ -219,6 +234,8 @@ def _applicable(
 ) -> bool:
     if definition.id == "static.full_assessment":
         return _is_full_category_intent(intent)
+    if definition.id == "static.test_category":
+        return _is_test_category_intent(intent)
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))

@@ -19,6 +19,7 @@ tools:
   - browser_screenshot
 checks:
   - static.full_assessment
+  - static.test_category
   - static.inventory
   - static.tests
   - static.ci

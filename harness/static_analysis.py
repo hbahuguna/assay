@@ -989,6 +989,32 @@ class StaticCheckRunner:
             metadata={"category": "full"},
         )
 
+    def check_static_test_category(self, check: Check) -> CheckOutcome:
+        payload = {
+            "category": "test",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "test_files": len(self.inventory.test_files),
+            "test_frameworks": self.inventory.test_frameworks,
+            "manifests": len(self.inventory.manifests),
+        }
+        evidence = self._save(
+            "test-category-scope",
+            payload,
+            check,
+            "Test category assessment scope and test inventory summary.",
+        )
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual="Test category assessment recorded with {} test file(s).".format(
+                len(self.inventory.test_files)
+            ),
+            evidence=[evidence],
+            metadata={"category": "test"},
+        )
+
     def check_static_accessibility(self, check: Check) -> CheckOutcome:
         matches: List[Dict[str, Any]] = []
         for rel, path in self._iter_files(MARKUP_EXTENSIONS):

@@ -97,6 +97,7 @@ class RegistryTests(unittest.TestCase):
             set(registry.ids())
             - {
                 "static.full_assessment",
+                "static.test_category",
                 "browser.load",
                 "browser.console",
                 "browser.network",
