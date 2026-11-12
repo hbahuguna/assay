@@ -138,21 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-030 - Publish the report JSON Schema and contract tests
-
-- **Epic:** E6 Developer Experience and Integrations
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-016
-- **Status:** Ready
-- **Description:** Publish a JSON Schema for `quality-harness.report/v1` and run
-  contract tests so downstream consumers can rely on field names and types.
-- **Acceptance Criteria:**
-  - The schema is generated from or checked against the report builder.
-  - Additive optional fields are allowed; removing or retyping a field fails.
-  - Both a completed and a halted report validate against the schema.
-  - The schema is published as a release artifact with a stable URL.
-
 ### QH-031 - Add a redaction regression corpus
 
 - **Epic:** E7 Hardening, Privacy, and Reliability
@@ -265,8 +250,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-029` are complete, so `QH-030` is now
-the lowest-numbered unblocked task. `QH-030` continues the
+No task is claimed. `QH-001` through `QH-030` are complete, so `QH-031` is now
+the lowest-numbered unblocked task. `QH-031` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1048,6 +1033,29 @@ commercial-critical-path chain.
   `.github/workflows/pr.yml`. Full suite: 232 passing tests with Python 3.11.
   `BOARD.md` D31 records the PR automation decision.
 
+### QH-030 - Publish the report JSON Schema and contract tests
+
+- **Epic:** E6 Developer Experience and Integrations
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-016
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Published `schemas/report/report.v1.schema.json` and added
+  `report_schema()` and `validate_report()` to `harness/report.py`. Contract
+  tests validate completed and halted reports, reject removed or retyped fields,
+  allow additive fields, and check the schema is staged as a release artifact.
+- **Acceptance Criteria:**
+  - The schema is generated from or checked against the report builder.
+  - Additive optional fields are allowed; removing or retyping a field fails.
+  - Both a completed and a halted report validate against the schema.
+  - The schema is published as a release artifact with a stable URL.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_report_schema -v`
+- **Evidence:** `tests/test_report_schema.py`,
+  `schemas/report/report.v1.schema.json`, and release workflow artifact staging.
+  Full suite: 238 passing tests with Python 3.11. `BOARD.md` D32 records the
+  contract decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1103,3 +1111,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D29 | 2026-11-12 | Billing regression coverage is table-driven over free/pro/enterprise plans and exercises upgrades, downgrades, cancellation, failed payments, feature-flag denial, and unexpected provider calls using the local sandbox fake. A dedicated GitHub Actions workflow runs only the billing tests under `coverage` and uploads the report. | Table-driven tests make plan behavior auditable and prevent silent drift when limits change. The local fake keeps tests deterministic and network-free, while the coverage workflow makes billing regressions visible in CI. | Expand the table when new tiers are added; add provider-specific contract tests when sandbox credentials become available. |
 | D30 | 2026-11-12 | Releases use a GitHub Actions workflow that builds an sdist/wheel, signs artifacts with Sigstore, attests provenance, verifies signatures before publishing, publishes to PyPI with trusted publishing, and builds/signs separate core and browser container images. The core image contains no Playwright; the browser image is based on the Playwright Python image. A bad signature fails the verification job before publication. | Sigstore keyless signing and GitHub artifact attestations provide supply-chain evidence without managing long-lived signing keys. Separate images keep the deterministic core small while making browser support explicit. | Add SBOM generation and container vulnerability scanning before the first public release. |
 | D31 | 2026-11-12 | PR automation is a composite GitHub Action plus a fork-safe workflow. The Action runs the harness, uploads evidence, exposes score/decision/coverage outputs, and posts or updates one marker-based comment. Comment writes are skipped when the GitHub context is unavailable, so fork pull requests can run with read-only permissions. The workflow passes `--fail-on` and `--min-score` directly to the harness. | Reusing the machine-first CLI keeps the PR summary derived from the same JSON report as CI. A single marker comment avoids duplicate noise, and read-only permissions prevent secret exposure on forked pull requests. | Add check-run annotations and changed-file scoping in a later integration task. |
+| D32 | 2026-11-12 | The report contract is published as `schemas/report/report.v1.schema.json` and checked by `harness.report.report_schema()` and `validate_report()`. The schema requires all current top-level fields, types additive optional fields, and is staged as a release artifact. Completed and halted reports both validate. | A published JSON Schema lets downstream consumers validate reports without importing the harness. Checking it in tests prevents silent contract drift. Allowing additional properties preserves backward-compatible evolution. | Generate the schema directly from the report builder if the field set grows beyond manual maintenance. |

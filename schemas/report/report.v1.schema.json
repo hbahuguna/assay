@@ -1,0 +1,530 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quality-harness.dev/schemas/report/report.v1.schema.json",
+  "title": "Quality Harness report v1",
+  "description": "Stable machine-readable report emitted by quality-harness run.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "run_id",
+    "determinism",
+    "status",
+    "workflow",
+    "target",
+    "intent",
+    "policy",
+    "metering",
+    "decision",
+    "trend",
+    "confidence",
+    "findings",
+    "finding_counts",
+    "invalid_findings",
+    "blockers",
+    "contract_failures",
+    "checks",
+    "coverage",
+    "risks",
+    "personas",
+    "inventory",
+    "phases",
+    "kill_switch",
+    "halted_reason",
+    "limitations",
+    "evidence",
+    "started_at",
+    "completed_at",
+    "options",
+    "error"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "quality-harness.report/v1"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "determinism": {
+      "type": "object",
+      "required": [
+        "seed",
+        "clock_mode",
+        "entropy"
+      ],
+      "properties": {
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "clock_mode": {
+          "type": "string"
+        },
+        "entropy": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "status": {
+      "type": "string"
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "phases"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "phases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "kind",
+        "raw",
+        "resolved",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "raw": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "intent": {
+      "type": "string"
+    },
+    "policy": {
+      "type": "object",
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "metering": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "sink",
+        "workspace",
+        "event_count",
+        "event_types"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "sink": {
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        },
+        "event_count": {
+          "type": "integer"
+        },
+        "event_types": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "decision",
+        "rationale"
+      ],
+      "properties": {
+        "decision": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "trend": {
+      "type": "object",
+      "required": [
+        "baseline",
+        "previous_run_id",
+        "new",
+        "resolved",
+        "persistent",
+        "score_delta",
+        "coverage_delta"
+      ],
+      "properties": {
+        "baseline": {
+          "type": "boolean"
+        },
+        "previous_run_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "new": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "persistent": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "score_delta": {
+          "type": "number"
+        },
+        "coverage_delta": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "confidence": {
+      "type": "object",
+      "required": [
+        "score",
+        "band",
+        "coverage",
+        "rationale",
+        "limitations",
+        "penalties",
+        "domain_scores",
+        "breakdown",
+        "gate"
+      ],
+      "properties": {
+        "score": {
+          "type": "number"
+        },
+        "band": {
+          "type": "string"
+        },
+        "coverage": {
+          "type": "number"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "penalties": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "domain_scores": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "breakdown": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "gate": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "finding_counts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "invalid_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "contract_failures": {
+      "type": "object",
+      "required": [
+        "total",
+        "by_persona",
+        "degraded_personas"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "by_persona": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "degraded_personas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "total_checks",
+        "executed",
+        "passed",
+        "failed",
+        "blocked",
+        "skipped",
+        "error",
+        "planned_not_run",
+        "blockers",
+        "blockers_covered_elsewhere",
+        "blockers_uncovered",
+        "blockers_by_persona",
+        "executed_pct",
+        "by_domain"
+      ],
+      "properties": {
+        "total_checks": {
+          "type": "integer"
+        },
+        "executed": {
+          "type": "integer"
+        },
+        "passed": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "blocked": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "integer"
+        },
+        "planned_not_run": {
+          "type": "integer"
+        },
+        "blockers": {
+          "type": "integer"
+        },
+        "blockers_covered_elsewhere": {
+          "type": "integer"
+        },
+        "blockers_uncovered": {
+          "type": "integer"
+        },
+        "blockers_by_persona": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "executed_pct": {
+          "type": "number"
+        },
+        "by_domain": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "personas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "kill_switch": {
+      "type": "object",
+      "required": [
+        "armed",
+        "triggered",
+        "threshold",
+        "reason",
+        "finding_id",
+        "manual",
+        "triggered_at"
+      ],
+      "properties": {
+        "armed": {
+          "type": "boolean"
+        },
+        "triggered": {
+          "type": "boolean"
+        },
+        "threshold": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "finding_id": {
+          "type": "string"
+        },
+        "manual": {
+          "type": "boolean"
+        },
+        "triggered_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "halted_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "directory",
+        "summary"
+      ],
+      "properties": {
+        "directory": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string"
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

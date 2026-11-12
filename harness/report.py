@@ -263,3 +263,76 @@ def build_report(
         "options": state.options,
         "error": state.error,
     }
+
+
+import json
+from pathlib import Path
+
+REPORT_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "report" / "report.v1.schema.json"
+)
+
+
+def report_schema() -> Dict[str, Any]:
+    """Load the published JSON Schema for ``quality-harness.report/v1``."""
+
+    return json.loads(REPORT_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+def _json_type_ok(value: Any, expected: Any) -> bool:
+    if isinstance(expected, (list, tuple)):
+        return any(_json_type_ok(value, item) for item in expected)
+    if expected == "null":
+        return value is None
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "object":
+        return isinstance(value, dict)
+    return True
+
+
+def validate_report(report: Any) -> List[str]:
+    """Return validation errors for a report, or an empty list when valid."""
+
+    schema = report_schema()
+    errors: List[str] = []
+
+    def visit(instance: Any, subschema: Dict[str, Any], path: str) -> None:
+        if "const" in subschema and instance != subschema["const"]:
+            errors.append(
+                "{}: expected constant {}".format(path or "<root>", subschema["const"])
+            )
+        expected_type = subschema.get("type")
+        if expected_type is not None and not _json_type_ok(instance, expected_type):
+            errors.append(
+                "{}: expected type {}, got {}".format(
+                    path or "<root>", expected_type, type(instance).__name__
+                )
+            )
+            return
+        if isinstance(instance, dict):
+            for field in subschema.get("required", []):
+                if field not in instance:
+                    errors.append("{}: missing required field {}".format(path or "<root>", field))
+            properties = subschema.get("properties", {})
+            for field, value in instance.items():
+                if field in properties:
+                    visit(value, properties[field], "{}/{}".format(path, field) if path else field)
+        elif isinstance(instance, list) and "items" in subschema:
+            for index, item in enumerate(instance):
+                visit(item, subschema["items"], "{}[{}]".format(path, index))
+
+    visit(report, schema, "")
+    return errors
+
+
+def is_valid_report(report: Any) -> bool:
+    return not validate_report(report)

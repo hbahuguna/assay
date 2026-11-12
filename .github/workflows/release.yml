@@ -39,11 +39,24 @@ jobs:
         with:
           subject-path: "dist/*"
 
+      - name: Stage report schema with release artifacts
+        run: |
+          mkdir -p dist/schemas/report
+          cp schemas/report/report.v1.schema.json dist/schemas/report/
+          cp schemas/report/index.json dist/schemas/report/
+
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: python-release-artifacts
           path: dist/*
+          if-no-files-found: error
+
+      - name: Upload report schema artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-schema
+          path: schemas/report/*
           if-no-files-found: error
 
   verify-signatures:

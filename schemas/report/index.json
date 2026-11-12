@@ -1,0 +1,4 @@
+{
+  "schema_version": "quality-harness.report.schemas/v1",
+  "report": "report.v1.schema.json"
+}
