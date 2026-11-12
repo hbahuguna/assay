@@ -5,9 +5,10 @@ const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
 
 function runAssay(args: string[]): string {
   try {
-    return execFileSync(PYTHON, ["-m", "harness", ...args], {
+    return execFileSync(PYTHON, ["-P", "-m", "harness", ...args], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PYTHONPATH: "/Users/skaparwan/github/assay" },
     })
   } catch (error) {
     const failure = error as { stderr?: string; message?: string }
