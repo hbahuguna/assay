@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -319,3 +320,146 @@ class StateStore:
                     os.unlink(temp_name)
                 except OSError:
                     pass
+
+
+SUPPRESSION_SCHEMA = "quality-harness.suppressions/v1"
+
+
+class SuppressionStore:
+    """Durable finding suppressions with owner, reason, ticket, and expiry."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = Path(root).resolve()
+        self.harness_dir = self.root / ".harness"
+        self.path = self.harness_dir / "suppressions.json"
+        self.events_path = self.harness_dir / "events.jsonl"
+
+    def ensure(self) -> None:
+        self.harness_dir.mkdir(parents=True, exist_ok=True)
+
+    def _now(self) -> datetime:
+        return datetime.now(timezone.utc)
+
+    def _parse_expiry(self, value: str) -> datetime:
+        text = str(value or "").strip()
+        if not text:
+            raise StateError("Suppression expiry is required.")
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise StateError("Suppression expiry must be an ISO-8601 timestamp: {}".format(exc))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    def load(self) -> List[Dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise StateError("Could not read suppressions.json: {}".format(exc))
+        if not isinstance(data, dict):
+            raise StateError("suppressions.json must contain a JSON object")
+        if data.get("schema_version", SUPPRESSION_SCHEMA) != SUPPRESSION_SCHEMA:
+            raise StateError("Unsupported suppression schema version: {}".format(data.get("schema_version")))
+        records = data.get("suppressions", [])
+        if not isinstance(records, list):
+            raise StateError("suppressions must be an array")
+        return [record for record in records if isinstance(record, dict)]
+
+    def _save(self, records: List[Dict[str, Any]]) -> None:
+        self.ensure()
+        payload = json.dumps(
+            {"schema_version": SUPPRESSION_SCHEMA, "suppressions": records},
+            indent=2,
+            ensure_ascii=False,
+        )
+        StateStore(self.root)._atomic_write(self.path, payload)
+
+    def _append_event(self, event: Dict[str, Any]) -> None:
+        self.ensure()
+        with self.events_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def add(
+        self,
+        fingerprint: str,
+        owner: str,
+        reason: str,
+        ticket: str = "",
+        expires_at: str = "",
+    ) -> Dict[str, Any]:
+        fingerprint = str(fingerprint or "").strip()
+        owner = str(owner or "").strip()
+        reason = str(reason or "").strip()
+        ticket = str(ticket or "").strip()
+        if not fingerprint:
+            raise StateError("Suppression fingerprint is required.")
+        if not owner:
+            raise StateError("Suppression owner is required.")
+        if not reason:
+            raise StateError("Suppression reason is required.")
+        expiry = self._parse_expiry(expires_at)
+        if expiry <= self._now():
+            raise StateError("Suppression expiry must be in the future.")
+
+        record = {
+            "fingerprint": fingerprint,
+            "owner": owner,
+            "reason": reason,
+            "ticket": ticket,
+            "expires_at": expiry.isoformat().replace("+00:00", "Z"),
+            "created_at": utc_now(),
+        }
+        records = [item for item in self.load() if item.get("fingerprint") != fingerprint]
+        records.append(record)
+        self._save(records)
+        self._append_event(
+            {
+                "event": "suppression_added",
+                "fingerprint": fingerprint,
+                "owner": owner,
+                "ticket": ticket,
+                "expires_at": record["expires_at"],
+                "reason": reason,
+            }
+        )
+        return record
+
+    def remove(self, fingerprint: str) -> Dict[str, Any]:
+        fingerprint = str(fingerprint or "").strip()
+        if not fingerprint:
+            raise StateError("Suppression fingerprint is required.")
+        records = self.load()
+        removed = [item for item in records if item.get("fingerprint") == fingerprint]
+        if not removed:
+            raise StateError("No suppression found for fingerprint: {}".format(fingerprint))
+        records = [item for item in records if item.get("fingerprint") != fingerprint]
+        self._save(records)
+        self._append_event(
+            {
+                "event": "suppression_removed",
+                "fingerprint": fingerprint,
+            }
+        )
+        return removed[-1]
+
+    def active_and_expired(self, now: Optional[datetime] = None) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
+        now = now or self._now()
+        active: Dict[str, Dict[str, Any]] = {}
+        expired: List[str] = []
+        for record in self.load():
+            fingerprint = str(record.get("fingerprint", ""))
+            if not fingerprint:
+                continue
+            try:
+                expires = self._parse_expiry(str(record.get("expires_at", "")))
+            except StateError:
+                expired.append(fingerprint)
+                continue
+            if expires > now:
+                active[fingerprint] = record
+            else:
+                expired.append(fingerprint)
+        return active, expired

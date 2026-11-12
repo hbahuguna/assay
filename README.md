@@ -64,6 +64,11 @@ python -m harness verify-report --root .harness-demo --signature .harness-demo/.
 python -m harness run --target examples/sample-repo --no-browser \
   --fail-on-score-regression 5 --root .harness-demo
 
+# Suppress a known finding baseline with an owner and expiry.
+python -m harness suppress add <fingerprint> \
+  --owner alice --reason "accepted risk" --ticket T-1 \
+  --expires 2027-01-01T00:00:00Z --root .harness-demo
+
 # Inspect the latest persisted run.
 python -m harness status --root .harness-demo
 python -m harness report --root .harness-demo

@@ -138,22 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-018 - Add baseline suppression with owner and expiry
-
-- **Epic:** E4 Release Confidence and Reporting
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-017
-- **Status:** Ready
-- **Description:** Allow a finding fingerprint to be suppressed with a named
-  owner, reason, ticket, and expiry date. Expired suppressions re-enter scoring
-  and are called out in the report.
-- **Acceptance Criteria:**
-  - Suppression requires a non-empty owner, reason, and future expiry.
-  - Suppressed findings remain visible but do not add severity penalty.
-  - Expired suppressions automatically stop applying and raise a low finding.
-  - An audit event is appended for every suppression change.
-
 ### QH-019 - Define the metering event contract
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -472,8 +456,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-017` are complete, so `QH-018` is now
-the lowest-numbered unblocked task. `QH-019` remains the first
+No task is claimed. `QH-001` through `QH-018` are complete, so `QH-019` is now
+the lowest-numbered unblocked task. `QH-019` is also the first
 commercial-critical-path task.
 
 ## Blockers
@@ -933,6 +917,28 @@ commercial-critical-path task.
   regression. History entries now store finding fingerprints. Full suite: 121
   passing tests with Python 3.11. `README.md` documents
   `--fail-on-score-regression`.
+
+### QH-018 - Add baseline suppression with owner and expiry
+
+- **Epic:** E4 Release Confidence and Reporting
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-017
+- **Status:** Done
+- **Completed:** 2026-11-11
+- **Description:** Added durable finding suppressions with owner, reason, ticket,
+  and future expiry. Suppressed findings remain visible but do not add severity
+  penalty. Expired suppressions stop applying and raise a low finding. Every
+  add or remove appends an audit event.
+- **Acceptance Criteria:**
+  - Suppression requires a non-empty owner, reason, and future expiry.
+  - Suppressed findings remain visible but do not add severity penalty.
+  - Expired suppressions automatically stop applying and raise a low finding.
+  - An audit event is appended for every suppression change.
+- **Evidence:** `tests/test_suppression.py` verifies validation, visible
+  suppressed findings, penalty removal, expired suppression low findings, and
+  audit events. Full suite: 125 passing tests with Python 3.11.
+  `README.md` documents `suppress`.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 

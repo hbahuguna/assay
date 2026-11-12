@@ -157,6 +157,11 @@ class Finding:
     created_at: str = dataclasses.field(default_factory=utc_now)
     tags: List[str] = dataclasses.field(default_factory=list)
     fingerprint: str = ""
+    suppressed: bool = False
+    suppression_owner: str = ""
+    suppression_reason: str = ""
+    suppression_ticket: str = ""
+    suppression_expires_at: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)
@@ -180,6 +185,11 @@ class Finding:
             created_at=data.get("created_at", utc_now()),
             tags=list(data.get("tags", [])),
             fingerprint=data.get("fingerprint", ""),
+            suppressed=bool(data.get("suppressed", False)),
+            suppression_owner=data.get("suppression_owner", ""),
+            suppression_reason=data.get("suppression_reason", ""),
+            suppression_ticket=data.get("suppression_ticket", ""),
+            suppression_expires_at=data.get("suppression_expires_at", ""),
         )
 
 

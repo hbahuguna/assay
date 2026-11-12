@@ -23,7 +23,7 @@ from .orchestrator import Orchestrator, RunOptions
 from .personas import lint_personas, load_personas, scaffold_persona
 from .plugins import build_registry
 from .report import REPORT_SCHEMA
-from .state import StateStore
+from .state import StateStore, SuppressionStore
 
 
 def _print_json(payload: Dict[str, Any]) -> None:
@@ -234,6 +234,22 @@ def build_parser() -> argparse.ArgumentParser:
     verify_report.add_argument("--root", default=".")
     verify_report.add_argument("--signature", required=True, help="Signature hex string or path to a signature file.")
     verify_report.add_argument("--key", required=True, help="Verification key (string or path).")
+
+    for command_name in ("suppress", "suppressions"):
+        suppress = subparsers.add_parser(command_name, help="Manage baseline finding suppressions.")
+        suppress_subparsers = suppress.add_subparsers(dest="suppress_action", required=True)
+        add = suppress_subparsers.add_parser("add", help="Add or replace a suppression.")
+        add.add_argument("fingerprint")
+        add.add_argument("--owner", required=True)
+        add.add_argument("--reason", required=True)
+        add.add_argument("--ticket", default="")
+        add.add_argument("--expires", required=True)
+        add.add_argument("--root", default=".")
+        listed = suppress_subparsers.add_parser("list", help="List suppressions.")
+        listed.add_argument("--root", default=".")
+        removed = suppress_subparsers.add_parser("remove", help="Remove a suppression.")
+        removed.add_argument("fingerprint")
+        removed.add_argument("--root", default=".")
 
     calibrate = subparsers.add_parser(
         "calibrate",
@@ -678,6 +694,35 @@ def _verify_report(args: argparse.Namespace) -> int:
     return 0 if valid else 1
 
 
+def _suppress(args: argparse.Namespace) -> int:
+    store = SuppressionStore(Path(args.root).expanduser().resolve())
+    action = getattr(args, "suppress_action", None)
+    if action == "add":
+        record = store.add(
+            args.fingerprint,
+            owner=args.owner,
+            reason=args.reason,
+            ticket=args.ticket,
+            expires_at=args.expires,
+        )
+        _print_json({"schema_version": "quality-harness.suppressions/v1", "status": "added", "suppression": record})
+        return 0
+    if action == "list":
+        _print_json(
+            {
+                "schema_version": "quality-harness.suppressions/v1",
+                "status": "ok",
+                "suppressions": store.load(),
+            }
+        )
+        return 0
+    if action == "remove":
+        record = store.remove(args.fingerprint)
+        _print_json({"schema_version": "quality-harness.suppressions/v1", "status": "removed", "suppression": record})
+        return 0
+    raise PersonaError("Unknown suppression action: {}".format(action))
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -707,6 +752,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _sign_report(args)
         if args.command == "verify-report":
             return _verify_report(args)
+        if args.command in ("suppress", "suppressions"):
+            return _suppress(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

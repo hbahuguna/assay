@@ -157,9 +157,10 @@ class Orchestrator:
     def __init__(self, root: Path, options: RunOptions, log=None) -> None:
         self.root = Path(root).resolve()
         self.options = options
-        from .state import StateStore
+        from .state import StateStore, SuppressionStore
 
         self.state_store = StateStore(self.root)
+        self.suppression_store = SuppressionStore(self.root)
         self.log_fn = log
         self.state: Optional[RunState] = None
         self.evidence: Optional[EvidenceStore] = None
@@ -1311,6 +1312,38 @@ class Orchestrator:
             )
         if self.policy is not None:
             self.state.options["policy"] = {"id": self.policy.id, "version": self.policy.version}
+        active_suppressions, expired_suppressions = self.suppression_store.active_and_expired()
+        for finding in self.state.findings:
+            record = active_suppressions.get(finding.fingerprint)
+            if record is None:
+                finding.suppressed = False
+                finding.suppression_owner = ""
+                finding.suppression_reason = ""
+                finding.suppression_ticket = ""
+                finding.suppression_expires_at = ""
+            else:
+                finding.suppressed = True
+                finding.suppression_owner = str(record.get("owner", ""))
+                finding.suppression_reason = str(record.get("reason", ""))
+                finding.suppression_ticket = str(record.get("ticket", ""))
+                finding.suppression_expires_at = str(record.get("expires_at", ""))
+        for fingerprint in expired_suppressions:
+            expired_fingerprint = "suppression-expired:{}".format(fingerprint)
+            if any(item.fingerprint == expired_fingerprint for item in self.state.findings):
+                continue
+            expired_finding = Finding(
+                id=new_id("finding"),
+                title="Expired suppression: {}".format(fingerprint),
+                severity=Severity.LOW.value,
+                domain="functional",
+                persona="functional",
+                strength="source_proven",
+                consequence="A previously suppressed finding has re-entered scoring because its suppression expired.",
+                location="suppression:{}".format(fingerprint),
+                fingerprint=expired_fingerprint,
+                tags=["suppression", "expired"],
+            )
+            self.state.findings.append(expired_finding)
         confidence = score_confidence(
             self.state.checks,
             self.state.findings,

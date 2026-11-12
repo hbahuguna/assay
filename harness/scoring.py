@@ -286,6 +286,8 @@ def score_confidence(
     findings_by_severity: Dict[str, int] = {}
     penalty = 0.0
     for finding in unique_findings:
+        if getattr(finding, "suppressed", False):
+            continue
         severity = str(finding.severity)
         findings_by_severity[severity] = findings_by_severity.get(severity, 0) + 1
         points = policy.penalty_for(severity)
