@@ -396,6 +396,34 @@ does not embed commercial pricing. `harness.ledger.LedgerStore` is the
 primitive for cloud delivery and supports `from_auth_context` binding so tenant
 identity comes from the scoped `AuthContext`.
 
+### Self-serve signup and signed entitlements
+
+Onboarding is available as a local-first API with no UI in the OSS core. A signup
+request is idempotent by request id and creates one workspace, one owner key, a
+quota-backed free allowance, and a signed entitlement.
+
+```bash
+python -m harness signup create --root .harness-cloud \
+  --request-id signup-1 --name Acme --plan free-plan.json \
+  --effective-at 2026-11-12T00:00:00Z
+
+python -m harness signup usage --root .harness-cloud --workspace ws_acme
+python -m harness signup select-plan --root .harness-cloud \
+  --workspace ws_acme --plan pro-plan.json \
+  --effective-at 2026-12-01T00:00:00Z
+
+python -m harness signup verify --root .harness-cloud \
+  --entitlement entitlement.json
+```
+
+Entitlements are HMAC-SHA256 signed and verified locally. They encode the
+workspace, tier, limits, and effective billing period; tampering, workspace or
+period mismatch, and expiry all fail verification. Plan changes record an
+effective date and are rejected when they would place current usage above the
+new limits. `harness.signup.SignupStore` and `harness.entitlements` expose the
+same API; cloud adapters should resolve tenant identity first and bind quota
+through `QuotaStore.from_auth_context`.
+
 ### Live browser checks
 
 ```bash

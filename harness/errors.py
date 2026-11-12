@@ -61,3 +61,15 @@ class LedgerPeriodClosed(LedgerError):
             "Ledger period {} for workspace {} is closed; add an explicit "
             "adjustment instead of a late usage entry.".format(self.period, self.workspace)
         )
+
+
+class SignupError(HarnessError):
+    pass
+
+
+class PlanDowngradeError(SignupError):
+    pass
+
+
+class EntitlementError(SignupError):
+    pass

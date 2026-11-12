@@ -146,6 +146,7 @@ A task is done only when all of the following are true:
 | `harness/auth.py` | Workspace, hashed scoped API keys, run ownership, and auth audit trail |
 | `harness/quota.py` | Monthly run/check/browser/evidence allowances, soft warnings, hard-limit responses, atomic usage, and concurrency locking |
 | `harness/ledger.py` | Append-only usage ledger, period close, explicit corrections/adjustments, hash continuity, and CSV/JSON invoice export |
+| `harness/signup.py` | Self-serve signup, owner key issuance, free allowance, plan selection, and signed entitlements |
 | `harness/state.py` | Atomic progress state, events, run history, retention, and manual kill file |
 | `harness/report.py` | Stable `quality-harness.report/v1` report |
 | `schemas/metering/` | Normative JSON Schemas for the usage-event envelope and each v1 event type |

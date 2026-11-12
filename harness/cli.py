@@ -464,6 +464,44 @@ def build_parser() -> argparse.ArgumentParser:
     ledger_reconcile.add_argument("--invoice-id", default=None)
     ledger_reconcile.add_argument("--root", default=".")
 
+    signup = subparsers.add_parser(
+        "signup", help="Self-serve workspace signup, plan selection, and entitlements."
+    )
+    signup_subparsers = signup.add_subparsers(dest="signup_action", required=True)
+
+    signup_create = signup_subparsers.add_parser(
+        "create", help="Create a workspace, owner key, and signed entitlement."
+    )
+    signup_create.add_argument("--request-id", required=True)
+    signup_create.add_argument("--name", default="")
+    signup_create.add_argument("--plan", default=None, help="Path to a quota plan JSON file.")
+    signup_create.add_argument("--effective-at", default=None)
+    signup_create.add_argument("--root", default=".")
+
+    signup_select = signup_subparsers.add_parser(
+        "select-plan", help="Select or change a workspace plan."
+    )
+    signup_select.add_argument("--workspace", required=True)
+    signup_select.add_argument("--plan", required=True, help="Path to a quota plan JSON file.")
+    signup_select.add_argument("--effective-at", default=None)
+    signup_select.add_argument("--root", default=".")
+
+    signup_usage = signup_subparsers.add_parser(
+        "usage", help="Show signup, plan, and quota usage for a workspace."
+    )
+    signup_usage.add_argument("--workspace", required=True)
+    signup_usage.add_argument("--plan", default=None, help="Optional plan JSON overriding the stored plan.")
+    signup_usage.add_argument("--root", default=".")
+
+    signup_verify = signup_subparsers.add_parser(
+        "verify", help="Verify a signed entitlement."
+    )
+    signup_verify.add_argument("--entitlement", required=True, help="Path to an entitlement JSON file.")
+    signup_verify.add_argument("--root", default=".")
+    signup_verify.add_argument("--signing-key", default=None)
+    signup_verify.add_argument("--workspace", default=None)
+    signup_verify.add_argument("--period", default=None)
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Run labeled confidence calibration fixtures and write a report.",
@@ -1306,6 +1344,65 @@ def _ledger(args: argparse.Namespace) -> int:
         return getattr(exc, "exit_code", 2)
 
 
+def _signup(args: argparse.Namespace) -> int:
+    from .quota import QuotaPlan
+    from .signup import SignupStore, verify_entitlement
+
+    root = Path(args.root).expanduser().resolve()
+    store = SignupStore(root)
+    action = getattr(args, "signup_action", None)
+    try:
+        if action == "create":
+            plan = None
+            if args.plan:
+                plan = QuotaPlan.load(args.plan)
+            result = store.signup(
+                args.request_id,
+                name=args.name,
+                plan=plan,
+                effective_at=args.effective_at,
+            )
+            _print_json(result)
+            return 0
+        if action == "select-plan":
+            plan = QuotaPlan.load(args.plan)
+            result = store.select_plan(
+                args.workspace,
+                plan,
+                effective_at=args.effective_at,
+            )
+            _print_json(result)
+            return 0
+        if action == "usage":
+            plan = QuotaPlan.load(args.plan) if args.plan else None
+            result = store.usage(args.workspace, plan=plan)
+            _print_json(result)
+            return 0
+        if action == "verify":
+            entitlement = json.loads(
+                Path(args.entitlement).expanduser().read_text(encoding="utf-8")
+            )
+            result = store.verify_entitlement(
+                entitlement,
+                signing_key=args.signing_key,
+                workspace_id=args.workspace,
+                period=args.period,
+            )
+            _print_json(result)
+            return 0 if result.get("valid") else 1
+        raise HarnessError("Unknown signup action: {}".format(action))
+    except Exception as exc:  # SignupError is a HarnessError subclass.
+        _print_json(
+            {
+                "schema_version": "quality-harness.signup/v1",
+                "status": "error",
+                "command": "signup",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+        )
+        return getattr(exc, "exit_code", 2)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1343,6 +1440,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _quota(args)
         if args.command == "ledger":
             return _ledger(args)
+        if args.command == "signup":
+            return _signup(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

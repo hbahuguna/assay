@@ -138,27 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-023 - Add self-serve signup, free allowance, and plan selection
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-020, QH-021
-- **Status:** Ready
-- **Description:** Implement the API flow for a new customer to create a
-  workspace, receive a scoped key, consume a free allowance, select a
-  usage-based tier, and receive a signed entitlement that encodes the tier,
-  limits, and effective period without operator involvement.
-- **Acceptance Criteria:**
-  - Signup creates one workspace, one owner, and one default key.
-  - The free allowance is visible in the usage endpoint from the first request.
-  - Plan selection records an effective date and cannot silently downgrade
-    existing usage.
-  - The entitlement is signed, verifiable offline, scoped to the workspace and
-    period, and rejected after tampering or expiry.
-  - Replaying a signup request is idempotent.
-  - No endpoint returns another workspace's identifiers.
-
 ### QH-024 - Integrate metered subscription billing behind a feature flag
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -388,8 +367,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-022` are complete, so `QH-023` is now
-the lowest-numbered unblocked task. `QH-023` continues the
+No task is claimed. `QH-001` through `QH-023` are complete, so `QH-024` is now
+the lowest-numbered unblocked task. `QH-024` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -983,6 +962,36 @@ commercial-critical-path chain.
   the ledger CLI and price book; `BOARD.md` D24 records the storage and
   correction decision.
 
+### QH-023 - Add self-serve signup, free allowance, and plan selection
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-020, QH-021
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/signup.py` (with an `harness/entitlements.py`
+  compatibility shim) and a `signup` CLI for self-serve onboarding. Signup
+  creates one workspace, one owner key, a quota-backed free allowance, and an
+  HMAC-SHA256 signed entitlement. Plan selection records an effective date and
+  rejects downgrades below current usage. Replaying a request id is idempotent.
+- **Acceptance Criteria:**
+  - Signup creates one workspace, one owner, and one default key.
+  - The free allowance is visible in the usage endpoint from the first request.
+  - Plan selection records an effective date and cannot silently downgrade
+    existing usage.
+  - The entitlement is signed, verifiable offline, scoped to the workspace and
+    period, and rejected after tampering or expiry.
+  - Replaying a signup request is idempotent.
+  - No endpoint returns another workspace's identifiers.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_signup -v`
+- **Evidence:** `tests/test_signup.py` covers workspace/key/entitlement creation,
+  free-allowance visibility, idempotent replay, cross-workspace isolation, plan
+  selection and effective dates, downgrade rejection, signed entitlement
+  tampering/expiry/workspace/period rejection, module aliasing, and CLI
+  create/usage/verify/replay flows. Full suite: 188 passing tests with Python 3.11.
+  `README.md` and `BOARD.md` D25 document the onboarding contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1031,3 +1040,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D22 | 2026-11-12 | Cloud identity resolves through `harness.auth`: every request authenticates to exactly one workspace, API keys are stored as salted SHA-256 hashes with a public prefix, and run ids are claimed by one workspace. Wrong-scope requests return 403; missing, expired, revoked, and guessed/foreign run ids return 401/404 without workspace data. | Returning the same 404 for a guessed run id and another tenant's real id prevents tenant enumeration. A one-time secret plus a hashed store keeps plaintext keys out of state, logs, and the audit trail. Resolving workspace before quota in `QH-021` makes limits impossible to apply to the wrong tenant. | Add a KMS-backed keyed-hash pepper, rotation grace windows, and per-key rate limiting when the cloud execution layer lands in `QH-025`. |
 | D23 | 2026-11-12 | Quota enforcement is a durable per-action usage store (`quality-harness.quota/v1`) loaded from a monthly plan. A hard limit returns 429 before the requested quantity is recorded; earlier usage remains. Soft warnings are appended once per resource per period, and every decision carries remaining-quota headers. The `local` workspace and the no-plan OSS path are unlimited and write nothing. Cloud callers bind the store to `AuthContext.workspace_id`, never a request-body workspace. | Per-action enforcement preserves partial value and billing accuracy, while one atomic read-modify-write under a process and file lock prevents parallel workers from overspending. Keeping warnings in a separate quota event log avoids changing the frozen metering v1 contract because a warning is not a billable action. | Wire `QuotaStore` into the isolated cloud queue in `QH-025`; add plan/tier provisioning in `QH-023` and period-close corrections in `QH-022`. |
 | D24 | 2026-11-12 | Usage billing is an append-only hash-chained ledger (`quality-harness.ledger/v1`) under `.harness/ledger/entries.jsonl`, with immutable monthly close records in `periods.json`. Corrections are signed entries that reference the original entry or close id; a closed period rejects ordinary usage but accepts an explicit adjustment. Invoices derive from stored entry quantities and unit prices, and reconciliation checks the sum of quantity times unit price against the invoice total. Prices are supplied through a versioned price book; the OSS core does not embed commercial pricing. | Append-only records and hash continuity make tampering and accidental edits detectable, while explicit references preserve an auditable correction chain. Keeping close state separate from usage rows lets late events be rejected without losing earlier entries, and storing unit prices on entries keeps historical invoices reproducible even if a price book changes. | Wire ledger ingestion into `QH-024` cloud delivery, add billing-provider invoice IDs and tax handling there, and consider per-period entry compaction if run volume makes JSON Lines scanning too slow. |
+| D25 | 2026-11-12 | Self-serve signup is an idempotent onboarding store (`quality-harness.signup/v1`) that creates one workspace, one owner key, and a quota-backed free allowance, then issues an HMAC-SHA256 signed entitlement (`quality-harness.entitlement/v1`) encoding tier, limits, workspace, and effective period. Plan changes record an effective date and are rejected when they would downgrade below current usage. Entitlement verification is local and rejects tampering, workspace/period mismatch, and expiry. | Idempotency keys make retries safe without duplicate tenants or keys. Keeping the free allowance in the existing quota store makes usage visible immediately and reuses atomic monthly enforcement. HMAC signing uses only the standard library, stays offline-verifiable, and keeps commercial plan policy in caller-supplied plan JSON rather than the OSS core. | Add public-key signing and key rotation when an optional cryptography extra is approved; add email/identity proofing and billing-provider customer creation in `QH-024`. |
