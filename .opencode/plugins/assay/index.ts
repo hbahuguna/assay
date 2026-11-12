@@ -28,6 +28,7 @@ export default Plugin.define({
         name: "assay",
         description: "Run quality-harness: /assay <command> [args...]",
         execute: async ({ sessionID, prompt }) => {
+          const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
           const text = (prompt.text || "").trim()
           const tokens = text.split(/\s+/).filter(Boolean)
           const subcommands = new Set(["run", "status", "report", "abort", "personas", "verify-evidence", "auth", "quota", "ledger", "signup", "billing", "calibrate", "sarif", "junit", "sign-report", "verify-report", "prune"])
@@ -44,10 +45,10 @@ export default Plugin.define({
             // Treat a plain-language request as a risk-based run with that intent.
             args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas", "--intent", text]
           }
-          const output = await runAssay(args, ctx.location.directory)
+          const output = await runAssay(args, projectDirectory)
           await ctx.session.prompt({
             sessionID,
-            text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nReport this output only. Do not run any additional commands or tools.`,
+            text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed if needed to investigate the findings.`,
           })
         },
       })
