@@ -29,7 +29,7 @@ export default Plugin.define({
             args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas"]
           }
           const output = runAssay(args)
-          await ctx.session.synthetic({ sessionID, text: output })
+          await ctx.session.prompt({ sessionID, text: output })
         },
       })
     })
