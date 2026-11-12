@@ -1,18 +1,21 @@
 import { Plugin } from "@opencode/plugin"
-import { execFileSync } from "node:child_process"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+
+const execFileAsync = promisify(execFile)
 
 const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
 
-function runAssay(args: string[]): string {
+async function runAssay(args: string[]): Promise<string> {
   try {
-    return execFileSync(PYTHON, ["-P", "-m", "harness", ...args], {
+    const { stdout, stderr } = await execFileAsync(PYTHON, ["-P", "-m", "harness", ...args], {
       encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, PYTHONPATH: "/Users/skaparwan/github/assay" },
     })
+    return stdout || stderr || "(no output)"
   } catch (error) {
-    const failure = error as { stderr?: string; message?: string }
-    return `assay failed:\n${failure.stderr || failure.message || String(error)}`
+    const failure = error as { stderr?: string; message?: string; stdout?: string }
+    return `assay failed:\n${failure.stderr || failure.stdout || failure.message || String(error)}`
   }
 }
 
@@ -36,7 +39,7 @@ export default Plugin.define({
             // Treat a plain-language request as a risk-based run with that intent.
             args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas", "--intent", text]
           }
-          const output = runAssay(args)
+          const output = await runAssay(args)
           await ctx.session.prompt({
             sessionID,
             text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nReport this output only. Do not run any additional commands or tools.`,
