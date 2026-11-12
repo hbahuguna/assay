@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-020 - Add workspace, API-key, and scoped-token authentication
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P0
-- **Points:** 8
-- **Depends on:** QH-019
-- **Status:** Ready
-- **Description:** Introduce workspaces and hashed API keys with scopes for run,
-  read, export, and admin. Every cloud request must resolve to exactly one
-  workspace before it can consume quota.
-- **Acceptance Criteria:**
-  - Keys are stored only as hashes with a prefix for lookup and rotation.
-  - Missing, expired, revoked, and wrong-scope keys return distinct 401/403
-    responses with no workspace data.
-  - Cross-workspace access is impossible in tests, including guessed run ids.
-  - Key creation returns the secret exactly once and records an audit event.
-
 ### QH-021 - Enforce quotas with soft and hard limits
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -439,8 +422,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-019` are complete, so `QH-020` is now
-the lowest-numbered unblocked task. `QH-020` continues the
+No task is claimed. `QH-001` through `QH-020` are complete, so `QH-021` is now
+the lowest-numbered unblocked task. `QH-021` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -948,6 +931,32 @@ commercial-critical-path chain.
   passing tests with Python 3.11. `README.md` documents the sink and contract;
   `BOARD.md` D21 records the architecture decision.
 
+### QH-020 - Add workspace, API-key, and scoped-token authentication
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P0
+- **Points:** 8
+- **Depends on:** QH-019
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added durable workspaces, scoped API keys, and run-ownership
+  mapping in `harness/auth.py`, plus an `auth` CLI. Keys are issued once and
+  stored only as a per-key salt and SHA-256 hash with a public lookup prefix.
+  Authentication failures carry distinct 401/403 codes without workspace data.
+- **Acceptance Criteria:**
+  - Keys are stored only as hashes with a prefix for lookup and rotation.
+  - Missing, expired, revoked, and wrong-scope keys return distinct 401/403
+    responses with no workspace data.
+  - Cross-workspace access is impossible in tests, including guessed run ids.
+  - Key creation returns the secret exactly once and records an audit event.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_auth -v`
+- **Evidence:** `tests/test_auth.py` covers one-time secrets, persisted hashes,
+  distinct missing/expired/revoked/wrong-scope failures, opaque cross-workspace
+  and guessed run ids, atomic rotation, audit events, environment-token CLI
+  input, and persistence across store instances. Full suite: 146 passing tests
+  with Python 3.11. `README.md` documents the auth CLI and store; `BOARD.md` D22
+  records the security decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -993,3 +1002,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D19 | 2026-11-11 | `personas lint` aggregates all contract errors across all files rather than failing on the first error, exiting 1 on validation failure. `personas scaffold <id>` generates complete, valid contracts with a `plugin.<id>.placeholder` check so they pass lint immediately without duplicating ownership of built-in checks; lint treats these matching placeholders as advisory warnings. | Halting on the first file error forces tedious fix-and-rerun loops. Using a namespaced placeholder allows scaffolding a valid contract into an existing repo where all built-in checks are already claimed, keeping disjoint ownership invariant while avoiding false-positive errors. | When plugin authoring is expanded, allow `scaffold` to generate a companion plugin stub or register the placeholder in local dev configs. |
 | D20 | 2026-11-11 | QH-014 publishes 14 labeled calibration fixtures and a `calibrate` CLI command; the current `weighted-coverage-v1` weights, penalties, and caps are retained without changes. | The fixtures make score behavior auditable and document two intentional disagreements (blocked coverage and static-only scope), but no fixture evidence currently justifies changing the published formula. | Revisit weights only if a labeled historical-outcome corpus shows systematic disagreement. |
 | D21 | 2026-11-12 | Usage metering is a versioned JSON Lines contract (`quality-harness.metering/v1`) with a frozen event name set and an idempotency key on every event. OSS runs write the same events to `.harness/metering/events.jsonl`; workspace defaults to `local` and source to `oss`. | A local file sink proves the billing contract without a cloud account, while idempotency lets a future delivery layer retry safely. Keeping metering separate from operational `events.jsonl` prevents audit logs from becoming billing records. | Add a cloud sink adapter in `QH-024`; any new billable action needs a new schema version or a frozen v1 addendum, never a silent rename. |
+| D22 | 2026-11-12 | Cloud identity resolves through `harness.auth`: every request authenticates to exactly one workspace, API keys are stored as salted SHA-256 hashes with a public prefix, and run ids are claimed by one workspace. Wrong-scope requests return 403; missing, expired, revoked, and guessed/foreign run ids return 401/404 without workspace data. | Returning the same 404 for a guessed run id and another tenant's real id prevents tenant enumeration. A one-time secret plus a hashed store keeps plaintext keys out of state, logs, and the audit trail. Resolving workspace before quota in `QH-021` makes limits impossible to apply to the wrong tenant. | Add a KMS-backed keyed-hash pepper, rotation grace windows, and per-key rate limiting when the cloud execution layer lands in `QH-025`. |

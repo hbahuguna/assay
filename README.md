@@ -256,6 +256,47 @@ A run report includes a `metering` summary with the sink, workspace, event count
 and per-type counts. Metering events are operational usage records, not pricing
 or billing policy; the OSS core remains unlimited and account-free.
 
+### Workspace authentication
+
+The cloud boundary uses workspaces and hashed, scoped API keys. This is a
+dependency-free module (`harness.auth`) and an operator CLI; normal OSS runs do
+not require an account. State lives in `.harness/cloud/auth.json` and the
+append-only audit trail lives in `.harness/cloud/auth-audit.jsonl`.
+
+```bash
+# Create a workspace. The workspace id is required before any quota is consumed.
+python -m harness auth create-workspace --name "Acme" --id ws_acme
+
+# Issue a key with explicit scopes: run, read, export, or admin.
+python -m harness auth create-key --workspace ws_acme \
+  --scope run --scope read --label ci
+
+# The secret is printed exactly once. Store it in your secret manager.
+# The durable store keeps only a per-key salt and SHA-256 hash plus a public
+# prefix used for lookup and rotation.
+python -m harness auth list-keys --workspace ws_acme
+
+# Rotation returns the replacement secret once and revokes the old key.
+python -m harness auth rotate-key --key key-...
+```
+
+`admin` implies the other scopes. Authentication failures are machine-readable
+401/403 responses with distinct codes and no workspace identifiers:
+`missing_api_key`, `malformed_api_key`, `invalid_api_key`, `expired_api_key`,
+`revoked_api_key`, and `insufficient_scope` (403). The CLI prints the HTTP status
+as `http_status` and exits 1 for an authentication or authorization failure.
+`--token env:VAR` reads a token from the environment instead of argv.
+
+Run ids are claimed by exactly one workspace. `authorize-run` returns
+`run_not_found` for both a guessed id and another workspace's real id, so the
+response cannot confirm tenant existence. `claim-run` returns
+`run_already_claimed` when a different workspace tries to take an existing id.
+
+```bash
+python -m harness auth claim-run --workspace ws_acme --run run-123
+python -m harness auth authorize-run --token env:QH_API_KEY --run run-123
+```
+
 ### Live browser checks
 
 ```bash

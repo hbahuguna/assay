@@ -261,6 +261,79 @@ def build_parser() -> argparse.ArgumentParser:
         removed.add_argument("fingerprint")
         removed.add_argument("--root", default=".")
 
+    auth = subparsers.add_parser(
+        "auth",
+        help="Manage cloud workspaces, scoped API keys, and run ownership as JSON.",
+    )
+    auth_subparsers = auth.add_subparsers(dest="auth_action", required=True)
+
+    auth_workspace = auth_subparsers.add_parser(
+        "create-workspace", help="Create a workspace."
+    )
+    auth_workspace.add_argument("--name", default="")
+    auth_workspace.add_argument("--id", dest="workspace_id", default=None)
+    auth_workspace.add_argument("--root", default=".")
+
+    auth_workspaces = auth_subparsers.add_parser(
+        "list-workspaces", help="List workspaces."
+    )
+    auth_workspaces.add_argument("--root", default=".")
+
+    auth_key = auth_subparsers.add_parser("create-key", help="Issue a scoped API key.")
+    auth_key.add_argument("--workspace", required=True)
+    auth_key.add_argument(
+        "--scope",
+        action="append",
+        help="Scope for the key (run, read, export, admin); repeat for multiple.",
+    )
+    auth_key.add_argument("--label", default="")
+    auth_key.add_argument("--expires", default=None)
+    auth_key.add_argument("--root", default=".")
+
+    auth_keys = auth_subparsers.add_parser("list-keys", help="List public key metadata.")
+    auth_keys.add_argument("--workspace", default=None)
+    auth_keys.add_argument("--root", default=".")
+
+    auth_revoke = auth_subparsers.add_parser("revoke-key", help="Revoke an API key.")
+    auth_revoke.add_argument("--key", required=True)
+    auth_revoke.add_argument("--reason", default="")
+    auth_revoke.add_argument("--root", default=".")
+
+    auth_rotate = auth_subparsers.add_parser(
+        "rotate-key", help="Rotate an API key and return the new secret once."
+    )
+    auth_rotate.add_argument("--key", required=True)
+    auth_rotate.add_argument(
+        "--scope",
+        action="append",
+        help="Replacement scopes; omit to keep the current scopes.",
+    )
+    auth_rotate.add_argument("--label", default=None)
+    auth_rotate.add_argument("--expires", default=None)
+    auth_rotate.add_argument("--root", default=".")
+
+    auth_authenticate = auth_subparsers.add_parser(
+        "authenticate", help="Resolve a token to one workspace context."
+    )
+    auth_authenticate.add_argument("--token", required=True, help="Token or env:VAR.")
+    auth_authenticate.add_argument("--scope", default=None)
+    auth_authenticate.add_argument("--root", default=".")
+
+    auth_claim = auth_subparsers.add_parser(
+        "claim-run", help="Bind a run id to one workspace."
+    )
+    auth_claim.add_argument("--workspace", required=True)
+    auth_claim.add_argument("--run", required=True)
+    auth_claim.add_argument("--root", default=".")
+
+    auth_authorize = auth_subparsers.add_parser(
+        "authorize-run", help="Authorize a token for one workspace-owned run id."
+    )
+    auth_authorize.add_argument("--token", required=True, help="Token or env:VAR.")
+    auth_authorize.add_argument("--run", required=True)
+    auth_authorize.add_argument("--scope", default="read")
+    auth_authorize.add_argument("--root", default=".")
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Run labeled confidence calibration fixtures and write a report.",
@@ -788,6 +861,124 @@ def _suppress(args: argparse.Namespace) -> int:
     raise PersonaError("Unknown suppression action: {}".format(action))
 
 
+def _auth_token(value: str) -> str:
+    if value.startswith("env:"):
+        import os
+
+        name = value[len("env:") :]
+        token = os.environ.get(name, "").strip()
+        if not token:
+            raise HarnessError("Environment variable is empty or missing: {}".format(name))
+        return token
+    return _read_key(value)
+
+
+def _auth(args: argparse.Namespace) -> int:
+    from .auth import AUTH_SCHEMA, AuthError, AuthStore
+
+    store = AuthStore(Path(args.root).expanduser().resolve())
+    action = getattr(args, "auth_action", None)
+    try:
+        if action == "create-workspace":
+            workspace = store.create_workspace(args.name, workspace_id=args.workspace_id)
+            _print_json(
+                {
+                    "schema_version": AUTH_SCHEMA,
+                    "status": "created",
+                    "workspace": workspace,
+                }
+            )
+            return 0
+        if action == "list-workspaces":
+            _print_json(
+                {
+                    "schema_version": AUTH_SCHEMA,
+                    "status": "ok",
+                    "workspaces": store.list_workspaces(),
+                }
+            )
+            return 0
+        if action == "create-key":
+            key = store.create_key(
+                args.workspace,
+                scopes=args.scope or ["run"],
+                label=args.label,
+                expires_at=args.expires,
+            )
+            _print_json(
+                {"schema_version": AUTH_SCHEMA, "status": "created", "key": key}
+            )
+            return 0
+        if action == "list-keys":
+            _print_json(
+                {
+                    "schema_version": AUTH_SCHEMA,
+                    "status": "ok",
+                    "keys": store.list_keys(args.workspace),
+                }
+            )
+            return 0
+        if action == "revoke-key":
+            key = store.revoke_key(args.key, reason=args.reason)
+            _print_json(
+                {"schema_version": AUTH_SCHEMA, "status": "revoked", "key": key}
+            )
+            return 0
+        if action == "rotate-key":
+            kwargs = {"scopes": args.scope}
+            if args.label is not None:
+                kwargs["label"] = args.label
+            if args.expires is not None:
+                kwargs["expires_at"] = args.expires
+            key = store.rotate_key(args.key, **kwargs)
+            _print_json(
+                {"schema_version": AUTH_SCHEMA, "status": "rotated", "key": key}
+            )
+            return 0
+        if action == "authenticate":
+            context = store.authenticate(
+                _auth_token(args.token), required_scope=args.scope or None
+            )
+            _print_json(
+                {
+                    "schema_version": AUTH_SCHEMA,
+                    "status": "authenticated",
+                    "context": context.to_dict(),
+                }
+            )
+            return 0
+        if action == "claim-run":
+            run = store.claim_run(args.workspace, args.run)
+            _print_json(
+                {"schema_version": AUTH_SCHEMA, "status": "claimed", "run": run}
+            )
+            return 0
+        if action == "authorize-run":
+            context = store.authenticate(_auth_token(args.token))
+            run = store.authorize_run(context, args.run, required_scope=args.scope or None)
+            _print_json(
+                {
+                    "schema_version": AUTH_SCHEMA,
+                    "status": "authorized",
+                    "context": context.to_dict(),
+                    "run": run,
+                }
+            )
+            return 0
+        raise HarnessError("Unknown auth action: {}".format(action))
+    except AuthError as exc:
+        payload = {
+            "schema_version": AUTH_SCHEMA,
+            "status": "error",
+            "command": "auth",
+            "http_status": exc.status_code,
+            "status_code": exc.status_code,
+            "error": exc.to_dict()["error"],
+        }
+        _print_json(payload)
+        return 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -819,6 +1010,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _verify_report(args)
         if args.command in ("suppress", "suppressions"):
             return _suppress(args)
+        if args.command == "auth":
+            return _auth(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:
