@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-034 - Add failure-injection tests for state, evidence, and kill switch
-
-- **Epic:** E7 Hardening, Privacy, and Reliability
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-002, QH-032
-- **Status:** Ready
-- **Description:** Inject disk-full, permission, partial-write, corrupted
-  manifest, and kill-during-evidence failures, and prove the run fails closed
-  without claiming confidence.
-- **Acceptance Criteria:**
-  - Corrupt `progress.json` produces a typed error and preserves the last good
-    copy when available.
-  - A failed evidence write never produces a passing report.
-  - Kill during evidence collection still writes a hold report with the failure.
-  - Each injected failure has a deterministic test and a documented recovery.
-
 ### QH-035 - Guard resume against a changed plugin registry
 
 - **Epic:** E1 Deterministic Core Engine
@@ -198,8 +181,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-033` are complete, so `QH-034` is now
-the lowest-numbered unblocked task. `QH-034` continues the
+No task is claimed. `QH-001` through `QH-034` are complete, so `QH-035` is now
+the lowest-numbered unblocked task. `QH-035` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1077,6 +1060,28 @@ commercial-critical-path chain.
 - **Evidence:** `tests/test_ssrf.py`. Full suite: 256 passing tests with Python 3.11.
   `README.md` and `BOARD.md` D35 document the SSRF contract.
 
+### QH-034 - Add failure-injection tests for state, evidence, and kill switch
+
+- **Epic:** E7 Hardening, Privacy, and Reliability
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-002, QH-032
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `tests/test_failure_injection.py` covering corrupt
+  progress state, failed evidence writes, kill during evidence collection,
+  normal kill-switch halting, and partial manifest tampering. Each case proves
+  the run fails closed or records a hold report.
+- **Acceptance Criteria:**
+  - Corrupt `progress.json` produces a typed error and preserves the last good
+    copy when available.
+  - A failed evidence write never produces a passing report.
+  - Kill during evidence collection still writes a hold report with the failure.
+  - Each injected failure has a deterministic test and a documented recovery.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_failure_injection -v`
+- **Evidence:** `tests/test_failure_injection.py`. Full suite: 261 passing tests
+  with Python 3.11. `BOARD.md` D36 documents the failure-injection contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1136,3 +1141,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D33 | 2026-11-12 | Redaction is proven by a 25-shape synthetic corpus stored in `tests/fixtures/redaction_corpus.json`. A fixture run is executed and every artifact under `.harness/` is scanned for each raw value. The test also monkeypatches the redactor to an identity function and requires a leak, while failure messages never include the original value. | A committed synthetic corpus makes redaction regressions reproducible and reviewable. Scanning all artifacts catches leaks in state, evidence, reports, logs, and metering. The broken-redactor assertion ensures the test would fail if redaction stopped working. | Extend the corpus as new redaction patterns are added; add browser-capture redaction cases when Playwright is available in CI. |
 | D34 | 2026-11-12 | Evidence manifests are HMAC-SHA256 signed with a local evidence signing key. `EvidenceStore.verify()` checks the manifest signature, re-hashes every artifact, reports missing or substituted files with their path and check id, and returns a machine-readable alert. The `verify-evidence` CLI works offline and caps confidence at 0 with a `hold` decision when tampering is detected. | A signed manifest detects both artifact edits and manifest edits without a network dependency. Including check ids makes failures actionable for operators. Treating any verification failure as a hard hold prevents tampered evidence from supporting a release. | Move to public-key signatures when an optional cryptography extra is approved; add key rotation and per-run key identifiers. |
 | D35 | 2026-11-12 | URL targets are validated before navigation by resolving DNS and rejecting loopback, private, link-local, metadata, multicast, and reserved addresses unless an explicit CIDR or hostname allowlist permits them. Allowlists load from `.harness/ssrf-allowlist.json`, a config path, or `QH_SSRF_ALLOWLIST`; they are not a blanket bypass flag. Redirect chains and browser navigation are re-validated, and DNS rebinding is covered by tests. Target errors do not include resolved internal IPs. | SSRF protection must fail closed by default while still allowing local CI servers through documented configuration. Re-validating redirects closes a common bypass. Keeping internal addresses out of errors prevents information disclosure in reports and logs. | Add DNS pinning/proxy controls and IPv6 coverage expansion when browser execution moves to isolated workers. |
+| D36 | 2026-11-12 | Failure injection is covered by deterministic tests: corrupt `progress.json` raises a typed `StateError` without overwriting the last good file; a failed evidence write yields zero-confidence, non-shipping report; kill during evidence collection records a halted hold report; and a truncated manifest fails evidence verification. Recovery is documented as restoring the last good progress file or rerunning after fixing the underlying failure. | Failing closed prevents a partial or corrupted run from claiming confidence. Keeping the corrupt file in place preserves forensic evidence, while hold reports make kill behavior auditable. | Add disk-full and permission-denied injection once a cross-platform fault-injection helper is available. |
