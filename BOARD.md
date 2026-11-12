@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-029 - Add a GitHub Action with PR comment and status check
-
-- **Epic:** E6 Developer Experience and Integrations
-- **Priority:** P1
-- **Points:** 3
-- **Depends on:** QH-016
-- **Status:** Ready
-- **Description:** Ship an Action that runs the harness, uploads evidence,
-  comments one concise confidence summary, and sets a required status check.
-- **Acceptance Criteria:**
-  - The comment includes score, decision, coverage, new findings, and artifact
-    links without leaking redacted values.
-  - Re-running updates the existing comment instead of creating duplicates.
-  - Fork pull requests run without write tokens or secrets.
-  - The Action honors `--fail-on` and `--min-score`.
-  - A sample workflow is tested against `examples/sample-repo`.
-
 ### QH-030 - Publish the report JSON Schema and contract tests
 
 - **Epic:** E6 Developer Experience and Integrations
@@ -282,8 +265,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-028` are complete, so `QH-029` is now
-the lowest-numbered unblocked task. `QH-029` continues the
+No task is claimed. `QH-001` through `QH-029` are complete, so `QH-030` is now
+the lowest-numbered unblocked task. `QH-030` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1038,6 +1021,33 @@ commercial-critical-path chain.
   229 passing tests with Python 3.11. `README.md` and `BOARD.md` D30 document
   the release contract.
 
+### QH-029 - Add a GitHub Action with PR comment and status check
+
+- **Epic:** E6 Developer Experience and Integrations
+- **Priority:** P1
+- **Points:** 3
+- **Depends on:** QH-016
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `.github/actions/quality-harness/action.yml` and
+  `.github/workflows/pr.yml`. The composite Action runs the harness, uploads
+  evidence, emits score/decision/coverage outputs, and posts or updates one
+  marker-based PR comment. The sample workflow is fork-safe with read-only
+  permissions and honors `--fail-on` and `--min-score`.
+- **Acceptance Criteria:**
+  - The comment includes score, decision, coverage, new findings, and artifact
+    links without leaking redacted values.
+  - Re-running updates the existing comment instead of creating duplicates.
+  - Fork pull requests run without write tokens or secrets.
+  - The Action honors `--fail-on` and `--min-score`.
+  - A sample workflow is tested against `examples/sample-repo`.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_github_action -v`
+- **Evidence:** `tests/test_github_action.py`,
+  `.github/actions/quality-harness/action.yml`,
+  `.github/actions/quality-harness/comment.py`, and
+  `.github/workflows/pr.yml`. Full suite: 232 passing tests with Python 3.11.
+  `BOARD.md` D31 records the PR automation decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1092,3 +1102,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D28 | 2026-11-12 | Tenant retention is an explicit per-workspace policy (default 30 days) with soft deletion for a grace period and auditable hard deletion. Exports are ZIP archives containing tenant state/evidence and filtered central records, plus a signed manifest of SHA-256 hashes. Hard deletion removes tenant roots, queue jobs, cached exports, billing/quota state, and signup records, while appending an audit record. | Explicit retention and grace periods prevent accidental data loss. Signed manifests make export tampering detectable and keep exports scoped to one tenant. Leaving an audit trail after hard deletion preserves accountability without retaining tenant data. | Add scheduled retention enforcement, encrypted archives, and GDPR-style deletion certificates when the cloud control plane lands. |
 | D29 | 2026-11-12 | Billing regression coverage is table-driven over free/pro/enterprise plans and exercises upgrades, downgrades, cancellation, failed payments, feature-flag denial, and unexpected provider calls using the local sandbox fake. A dedicated GitHub Actions workflow runs only the billing tests under `coverage` and uploads the report. | Table-driven tests make plan behavior auditable and prevent silent drift when limits change. The local fake keeps tests deterministic and network-free, while the coverage workflow makes billing regressions visible in CI. | Expand the table when new tiers are added; add provider-specific contract tests when sandbox credentials become available. |
 | D30 | 2026-11-12 | Releases use a GitHub Actions workflow that builds an sdist/wheel, signs artifacts with Sigstore, attests provenance, verifies signatures before publishing, publishes to PyPI with trusted publishing, and builds/signs separate core and browser container images. The core image contains no Playwright; the browser image is based on the Playwright Python image. A bad signature fails the verification job before publication. | Sigstore keyless signing and GitHub artifact attestations provide supply-chain evidence without managing long-lived signing keys. Separate images keep the deterministic core small while making browser support explicit. | Add SBOM generation and container vulnerability scanning before the first public release. |
+| D31 | 2026-11-12 | PR automation is a composite GitHub Action plus a fork-safe workflow. The Action runs the harness, uploads evidence, exposes score/decision/coverage outputs, and posts or updates one marker-based comment. Comment writes are skipped when the GitHub context is unavailable, so fork pull requests can run with read-only permissions. The workflow passes `--fail-on` and `--min-score` directly to the harness. | Reusing the machine-first CLI keeps the PR summary derived from the same JSON report as CI. A single marker comment avoids duplicate noise, and read-only permissions prevent secret exposure on forked pull requests. | Add check-run annotations and changed-file scoping in a later integration task. |

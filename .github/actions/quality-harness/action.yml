@@ -1,0 +1,142 @@
+name: Quality Harness
+description: Run quality-harness and publish a PR confidence summary.
+author: Quality Harness contributors
+
+inputs:
+  target:
+    description: Target path or URL to assess.
+    required: false
+    default: examples/sample-repo
+  source:
+    description: Optional source root for browser targets.
+    required: false
+    default: ""
+  personas-dir:
+    description: Personas directory.
+    required: false
+    default: personas
+  root:
+    description: Harness state root.
+    required: false
+    default: .harness-pr
+  no-browser:
+    description: Disable browser checks.
+    required: false
+    default: "true"
+  fail-on:
+    description: Fail when a finding meets this severity.
+    required: false
+    default: none
+  min-score:
+    description: Fail when confidence is below this score.
+    required: false
+    default: ""
+  comment:
+    description: Post or update a PR comment when a token is available.
+    required: false
+    default: "true"
+
+outputs:
+  score:
+    description: Confidence score.
+    value: ${{ steps.parse.outputs.score }}
+  decision:
+    description: Advisory decision.
+    value: ${{ steps.parse.outputs.decision }}
+  coverage:
+    description: Executed check percentage.
+    value: ${{ steps.parse.outputs.coverage }}
+  report-path:
+    description: Path to the generated report.
+    value: ${{ steps.run.outputs.report-path }}
+  exit-code:
+    description: Harness exit code.
+    value: ${{ steps.run.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Run quality-harness
+      id: run
+      shell: bash
+      run: |
+        set +e
+        root="${{ inputs.root }}"
+        report="$root/report.json"
+        mkdir -p "$root"
+        args=(
+          run
+          --target "${{ inputs.target }}"
+          --personas-dir "${{ inputs.personas-dir }}"
+          --root "$root"
+          --output "$report"
+        )
+        if [ -n "${{ inputs.source }}" ]; then
+          args+=(--source "${{ inputs.source }}")
+        fi
+        if [ "${{ inputs.no-browser }}" = "true" ]; then
+          args+=(--no-browser)
+        fi
+        if [ "${{ inputs.fail-on }}" != "none" ]; then
+          args+=(--fail-on "${{ inputs.fail-on }}")
+        fi
+        if [ -n "${{ inputs.min-score }}" ]; then
+          args+=(--min-score "${{ inputs.min-score }}")
+        fi
+        python -m harness "${args[@]}" > "$root/stdout.json" 2> "$root/stderr.log"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "report-path=$report" >> "$GITHUB_OUTPUT"
+        exit 0
+
+    - name: Parse report
+      id: parse
+      shell: bash
+      run: |
+        python - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+
+        root = Path(os.environ["INPUT_ROOT"])
+        report_path = root / "report.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        score = report.get("confidence", {}).get("score", 0)
+        decision = report.get("decision", {}).get("decision", "unknown")
+        coverage = report.get("coverage", {}).get("executed_pct", 0)
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write("score={}\n".format(score))
+            handle.write("decision={}\n".format(decision))
+            handle.write("coverage={}\n".format(coverage))
+        PY
+      env:
+        INPUT_ROOT: ${{ inputs.root }}
+
+    - name: Upload evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: quality-harness-evidence
+        path: ${{ inputs.root }}/.harness/evidence
+        if-no-files-found: ignore
+
+    - name: Post or update PR comment
+      if: always() && inputs.comment == 'true'
+      shell: bash
+      run: python "${{ github.action_path }}/comment.py"
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPORT_PATH: ${{ inputs.root }}/report.json
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        ARTIFACT_NAME: quality-harness-evidence
+
+    - name: Enforce harness result
+      shell: bash
+      run: |
+        code="${{ steps.run.outputs.exit-code }}"
+        if [ "$code" != "0" ]; then
+          echo "quality-harness exited with code $code" >&2
+          exit "$code"
+        fi
