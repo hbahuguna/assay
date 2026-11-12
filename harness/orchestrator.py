@@ -68,6 +68,7 @@ from .plugins import CheckRegistry, PluginCheckRunner, build_registry
 from .report import build_report
 from .risk import RiskAnalyzer
 from .scoring import Policy, load_policy, score_confidence
+from .ssrf import validate_url, load_allowlist
 from .static_analysis import Inventory, SourceInspector, StaticCheckRunner
 from .workflows import Workflow, get_workflow
 
@@ -160,6 +161,8 @@ class RunOptions:
     generated_at: object = None
     workspace: str = "local"
     metering_sink: Optional[str] = None
+    ssrf_allowlist: Optional[List[str]] = None
+    ssrf_allowlist_file: Optional[str] = None
 
 
 class Orchestrator:
@@ -389,6 +392,10 @@ class Orchestrator:
             parsed = urlsplit(raw)
             if not parsed.netloc:
                 raise TargetError("Target URL is missing a host: {}".format(raw))
+            allowlist = self.options.ssrf_allowlist
+            if allowlist is None and self.options.ssrf_allowlist_file:
+                allowlist = load_allowlist(self.options.ssrf_allowlist_file)
+            validate_url(raw, allowlist=allowlist, root=self.root)
             kind = "url"
             resolved = raw
             source_root = self._resolve_source(source) if source else None

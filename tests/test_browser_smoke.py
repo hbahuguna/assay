@@ -72,6 +72,7 @@ class BrowserSmokeTests(unittest.TestCase):
                     capture_output=True,
                     text=True,
                     timeout=180,
+                    env={**__import__("os").environ, "QH_SSRF_ALLOWLIST": "127.0.0.0/8,localhost"},
                 )
                 self.assertEqual(
                     completed.returncode,

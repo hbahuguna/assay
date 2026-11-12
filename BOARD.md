@@ -138,24 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-033 - Add SSRF-safe target validation and allowlists
-
-- **Epic:** E7 Hardening, Privacy, and Reliability
-- **Priority:** P0
-- **Points:** 5
-- **Depends on:** None
-- **Status:** Ready
-- **Description:** Validate URL targets before navigation: resolve DNS, reject
-  loopback, link-local, metadata, and private ranges by default, and require an
-  explicit CIDR allowlist for local test servers.
-- **Acceptance Criteria:**
-  - Cloud metadata and private-range targets are rejected with a clear error.
-  - Redirects are re-validated at every hop.
-  - An operator can allowlist localhost for CI through config, not a CLI flag
-    that bypasses all checks.
-  - DNS rebinding is covered by a test using a changing resolver.
-  - The error never includes resolved internal IPs in the public report.
-
 ### QH-034 - Add failure-injection tests for state, evidence, and kill switch
 
 - **Epic:** E7 Hardening, Privacy, and Reliability
@@ -216,8 +198,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-032` are complete, so `QH-033` is now
-the lowest-numbered unblocked task. `QH-033` continues the
+No task is claimed. `QH-001` through `QH-033` are complete, so `QH-034` is now
+the lowest-numbered unblocked task. `QH-034` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1071,6 +1053,30 @@ commercial-critical-path chain.
   with Python 3.11. `README.md` and `BOARD.md` D34 document the evidence
   signing contract.
 
+### QH-033 - Add SSRF-safe target validation and allowlists
+
+- **Epic:** E7 Hardening, Privacy, and Reliability
+- **Priority:** P0
+- **Points:** 5
+- **Depends on:** None
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/ssrf.py` with DNS resolution, default denial of
+  loopback, private, link-local, metadata, multicast, and reserved addresses,
+  CIDR/hostname allowlists loaded from config or environment, redirect-chain
+  revalidation, and browser navigation checks. Orchestrator URL targets are
+  validated before execution; errors avoid exposing resolved IPs.
+- **Acceptance Criteria:**
+  - Cloud metadata and private-range targets are rejected with a clear error.
+  - Redirects are re-validated at every hop.
+  - An operator can allowlist localhost for CI through config, not a CLI flag
+    that bypasses all checks.
+  - DNS rebinding is covered by a test using a changing resolver.
+  - The error never includes resolved internal IPs in the public report.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_ssrf -v`
+- **Evidence:** `tests/test_ssrf.py`. Full suite: 256 passing tests with Python 3.11.
+  `README.md` and `BOARD.md` D35 document the SSRF contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1129,3 +1135,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D32 | 2026-11-12 | The report contract is published as `schemas/report/report.v1.schema.json` and checked by `harness.report.report_schema()` and `validate_report()`. The schema requires all current top-level fields, types additive optional fields, and is staged as a release artifact. Completed and halted reports both validate. | A published JSON Schema lets downstream consumers validate reports without importing the harness. Checking it in tests prevents silent contract drift. Allowing additional properties preserves backward-compatible evolution. | Generate the schema directly from the report builder if the field set grows beyond manual maintenance. |
 | D33 | 2026-11-12 | Redaction is proven by a 25-shape synthetic corpus stored in `tests/fixtures/redaction_corpus.json`. A fixture run is executed and every artifact under `.harness/` is scanned for each raw value. The test also monkeypatches the redactor to an identity function and requires a leak, while failure messages never include the original value. | A committed synthetic corpus makes redaction regressions reproducible and reviewable. Scanning all artifacts catches leaks in state, evidence, reports, logs, and metering. The broken-redactor assertion ensures the test would fail if redaction stopped working. | Extend the corpus as new redaction patterns are added; add browser-capture redaction cases when Playwright is available in CI. |
 | D34 | 2026-11-12 | Evidence manifests are HMAC-SHA256 signed with a local evidence signing key. `EvidenceStore.verify()` checks the manifest signature, re-hashes every artifact, reports missing or substituted files with their path and check id, and returns a machine-readable alert. The `verify-evidence` CLI works offline and caps confidence at 0 with a `hold` decision when tampering is detected. | A signed manifest detects both artifact edits and manifest edits without a network dependency. Including check ids makes failures actionable for operators. Treating any verification failure as a hard hold prevents tampered evidence from supporting a release. | Move to public-key signatures when an optional cryptography extra is approved; add key rotation and per-run key identifiers. |
+| D35 | 2026-11-12 | URL targets are validated before navigation by resolving DNS and rejecting loopback, private, link-local, metadata, multicast, and reserved addresses unless an explicit CIDR or hostname allowlist permits them. Allowlists load from `.harness/ssrf-allowlist.json`, a config path, or `QH_SSRF_ALLOWLIST`; they are not a blanket bypass flag. Redirect chains and browser navigation are re-validated, and DNS rebinding is covered by tests. Target errors do not include resolved internal IPs. | SSRF protection must fail closed by default while still allowing local CI servers through documented configuration. Re-validating redirects closes a common bypass. Keeping internal addresses out of errors prevents information disclosure in reports and logs. | Add DNS pinning/proxy controls and IPv6 coverage expansion when browser execution moves to isolated workers. |

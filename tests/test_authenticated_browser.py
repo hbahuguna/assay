@@ -105,6 +105,7 @@ def _run_harness(root, url, extra_args=None, source=None):
         capture_output=True,
         text=True,
         timeout=180,
+        env={**__import__("os").environ, "QH_SSRF_ALLOWLIST": "127.0.0.0/8,localhost"},
     )
 
 
@@ -282,6 +283,7 @@ class AuthenticatedBrowserTests(unittest.TestCase):
             url = "http://127.0.0.1:{}/".format(port)
             env = dict(os.environ)
             env["AUTH_STATE"] = json.dumps(state)
+            env["QH_SSRF_ALLOWLIST"] = "127.0.0.0/8,localhost"
             try:
                 command = [
                     sys.executable,

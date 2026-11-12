@@ -302,6 +302,7 @@ class BlockerContractTests(unittest.TestCase):
                 target="http://127.0.0.1:9/",
                 source=str(SAMPLE),
                 personas_dir=str(PERSONAS),
+                ssrf_allowlist=["127.0.0.0/8"],
             )
             with patch(
                 "harness.browser.BrowserController.start", unavailable

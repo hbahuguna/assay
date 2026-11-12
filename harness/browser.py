@@ -18,8 +18,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
 
-from .errors import BrowserUnavailable
+from .errors import BrowserUnavailable, TargetError
 from .evidence import EvidenceStore
+from .ssrf import validate_url, load_allowlist
 from .models import Check, CheckStatus, Severity, Strength
 from .outcomes import BlockerDraft, CheckOutcome
 
@@ -334,6 +335,13 @@ class BrowserController:
             result.error = "Browser page is not available."
             self.navigation = result
             return result
+        allowlist = load_allowlist()
+        try:
+            validate_url(url, allowlist=allowlist)
+        except TargetError as exc:
+            result.error = str(exc)
+            self.navigation = result
+            return result
         try:
             response = await self.page.goto(url, wait_until="load", timeout=self.options.timeout_ms)
             try:
@@ -343,6 +351,15 @@ class BrowserController:
             result.status = response.status if response else None
             result.final_url = self.page.url
             if response is not None:
+                # Re-validate every redirect hop and the final URL.
+                request = response.request
+                chain = []
+                while request is not None:
+                    chain.append(request.url)
+                    request = request.redirected_from
+                for candidate in reversed(chain):
+                    validate_url(candidate, allowlist=allowlist)
+                validate_url(result.final_url, allowlist=allowlist)
                 try:
                     result.headers = {str(k).lower(): str(v) for k, v in (await response.all_headers()).items()}
                 except Exception as exc:

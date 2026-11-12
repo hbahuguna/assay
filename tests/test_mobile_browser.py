@@ -68,6 +68,7 @@ def _run_harness(root, url, extra_args=None):
         capture_output=True,
         text=True,
         timeout=180,
+        env={**__import__("os").environ, "QH_SSRF_ALLOWLIST": "127.0.0.0/8,localhost"},
     )
 
 

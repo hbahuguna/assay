@@ -121,6 +121,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--metering-sink",
         help="Path to the usage-event JSON Lines sink (default: .harness/metering/events.jsonl).",
     )
+    run.add_argument(
+        "--ssrf-allowlist",
+        default=None,
+        help="Path to a JSON SSRF allowlist configuration.",
+    )
     run.add_argument("--resume", action="store_true", help="Resume the last incomplete run.")
     run.add_argument(
         "--keep-runs",
@@ -580,6 +585,7 @@ def _run(args: argparse.Namespace) -> int:
         generated_at=args.generated_at,
         workspace=args.workspace,
         metering_sink=args.metering_sink,
+        ssrf_allowlist_file=args.ssrf_allowlist,
     )
 
     def log(message: str) -> None:

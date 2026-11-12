@@ -150,6 +150,7 @@ A task is done only when all of the following are true:
 | `harness/billing.py` | Feature-gated metered billing, sandbox provider, idempotent retries, degraded status, and kill switch |
 | `harness/queue.py` | Durable tenant-scoped run queue, job polling, cancellation, crash recovery, and queue metrics |
 | `harness/retention.py` | Retention policy, signed tenant export archives, soft deletion, and auditable hard deletion |
+| `harness/ssrf.py` | SSRF-safe URL validation, DNS resolution, CIDR allowlists, and redirect revalidation |
 | `harness/state.py` | Atomic progress state, events, run history, retention, and manual kill file |
 | `harness/report.py` | Stable `quality-harness.report/v1` report |
 | `schemas/metering/` | Normative JSON Schemas for the usage-event envelope and each v1 event type |

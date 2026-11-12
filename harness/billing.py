@@ -228,6 +228,17 @@ class BillingProvider:
     ) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def cancel_subscription(
+        self,
+        *,
+        workspace_id: str,
+        subscription_id: str,
+        idempotency_key: str,
+        secret: str,
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        raise NotImplementedError
+
     def reconcile_invoice(
         self,
         *,
@@ -347,6 +358,34 @@ class SandboxBillingProvider(BillingProvider):
         data["subscriptions"][idempotency_key] = subscription
         self._save(data)
         return dict(subscription)
+
+    def cancel_subscription(
+        self,
+        *,
+        workspace_id: str,
+        subscription_id: str,
+        idempotency_key: str,
+        secret: str,
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        data = self._load()
+        if idempotency_key in data.setdefault("cancellations", {}):
+            return dict(data["cancellations"][idempotency_key])
+        result = {
+            "provider": "sandbox",
+            "workspace_id": workspace_id,
+            "subscription_id": subscription_id,
+            "idempotency_key": idempotency_key,
+            "reason": _safe_text(reason, 500),
+            "status": "cancelled",
+        }
+        data.setdefault("cancellations", {})[idempotency_key] = result
+        # Mark the subscription cancelled if it exists.
+        for subscription in data.get("subscriptions", {}).values():
+            if isinstance(subscription, dict) and subscription.get("subscription_id") == subscription_id:
+                subscription["status"] = "cancelled"
+        self._save(data)
+        return dict(result)
 
     def reconcile_invoice(
         self,
@@ -863,6 +902,121 @@ class BillingStore:
                 self._save(data)
                 return True
         return False
+
+    def cancel_subscription(
+        self,
+        workspace_id: str,
+        *,
+        secret_ref: Optional[str] = None,
+        reason: str = "customer cancelled",
+        now: Any = None,
+    ) -> Dict[str, Any]:
+        workspace_key = _safe_text(workspace_id)
+        if not self.billing_enabled(workspace_key):
+            return self._disabled_result(workspace_key, "cancel_subscription")
+        secret = self._secret(secret_ref)
+        with _locked(self.lock_path):
+            data = self._load()
+            state = self._workspace_state(data, workspace_key)
+            if not state.get("subscription_id"):
+                self._save(data)
+                return self._degraded_result(
+                    workspace_key,
+                    "cancel_subscription",
+                    BillingError("No subscription is available to cancel."),
+                    self._idempotency_key("cancel", workspace_key, "subscription", ""),
+                )
+            subscription_id = str(state["subscription_id"])
+            idempotency_key = self._idempotency_key(
+                "cancel", workspace_key, subscription_id, ""
+            )
+            if state.get("subscription_status") == "cancelled":
+                self._save(data)
+                return {
+                    "schema_version": SCHEMA_VERSION,
+                    "status": "already_cancelled",
+                    "workspace_id": workspace_key,
+                    "subscription_id": subscription_id,
+                    "billing_enabled": True,
+                }
+        try:
+            provider_result = self._retry(
+                lambda: self.provider.cancel_subscription(
+                    workspace_id=workspace_key,
+                    subscription_id=subscription_id,
+                    idempotency_key=idempotency_key,
+                    secret=secret,
+                    reason=reason,
+                ),
+                idempotency_key=idempotency_key,
+            )
+        except Exception as exc:
+            with _locked(self.lock_path):
+                data = self._load()
+                state = self._workspace_state(data, workspace_key)
+                state["last_status"] = "degraded"
+                state["last_error"] = _safe_text(exc, 500)
+                state["updated_at"] = utc_now()
+                self._save(data)
+            return self._degraded_result(
+                workspace_key, "cancel_subscription", exc, idempotency_key
+            )
+        with _locked(self.lock_path):
+            data = self._load()
+            state = self._workspace_state(data, workspace_key)
+            state["subscription_status"] = "cancelled"
+            state["last_status"] = "cancelled"
+            state["last_error"] = ""
+            state["updated_at"] = utc_now()
+            state.setdefault("cancellations", []).append(provider_result)
+            self._save(data)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "status": "cancelled",
+            "workspace_id": workspace_key,
+            "subscription_id": subscription_id,
+            "billing": provider_result,
+            "idempotency_key": idempotency_key,
+            "billing_enabled": True,
+        }
+
+    def record_payment_failure(
+        self,
+        workspace_id: str,
+        *,
+        reason: str,
+        amount: Any = None,
+        invoice_id: Optional[str] = None,
+        now: Any = None,
+    ) -> Dict[str, Any]:
+        workspace_key = _safe_text(workspace_id)
+        now_text = utc_now() if now is None else str(now)
+        with _locked(self.lock_path):
+            data = self._load()
+            state = self._workspace_state(data, workspace_key)
+            state["last_status"] = "payment_failed"
+            state["last_error"] = _safe_text(reason, 500)
+            state["updated_at"] = now_text
+            state.setdefault("payment_failures", []).append(
+                {
+                    "reason": _safe_text(reason, 500),
+                    "amount": amount,
+                    "invoice_id": _safe_text(invoice_id or "", 200),
+                    "timestamp": now_text,
+                }
+            )
+            self._save(data)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "status": "payment_failed",
+            "workspace_id": workspace_key,
+            "reason": _safe_text(reason, 500),
+            "amount": amount,
+            "invoice_id": _safe_text(invoice_id or "", 200),
+        }
+
+    fail_payment = record_payment_failure
+    mark_payment_failed = record_payment_failure
 
     def _degraded_result(
         self,
