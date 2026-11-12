@@ -178,14 +178,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-040 - Add harness support for the /carbon-test test category
+### QH-040 - Add harness support for the /assay-test test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-test`
+- **Description:** Implement deterministic harness coverage for the `/assay-test`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -198,14 +198,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-041 - Add harness support for the /carbon-functionality test category
+### QH-041 - Add harness support for the /assay-functionality test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-functionality`
+- **Description:** Implement deterministic harness coverage for the `/assay-functionality`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -218,14 +218,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-042 - Add harness support for the /carbon-browser test category
+### QH-042 - Add harness support for the /assay-browser test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-browser`
+- **Description:** Implement deterministic harness coverage for the `/assay-browser`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -238,14 +238,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-043 - Add harness support for the /carbon-issues test category
+### QH-043 - Add harness support for the /assay-issues test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-issues`
+- **Description:** Implement deterministic harness coverage for the `/assay-issues`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -258,14 +258,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-044 - Add harness support for the /carbon-demo test category
+### QH-044 - Add harness support for the /assay-demo test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-demo`
+- **Description:** Implement deterministic harness coverage for the `/assay-demo`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -278,14 +278,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-045 - Add harness support for the /carbon-more test category
+### QH-045 - Add harness support for the /assay-more test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-more`
+- **Description:** Implement deterministic harness coverage for the `/assay-more`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -298,14 +298,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-046 - Add harness support for the /carbon-help test category
+### QH-046 - Add harness support for the /assay-help test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-help`
+- **Description:** Implement deterministic harness coverage for the `/assay-help`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -318,14 +318,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-047 - Add harness support for the /carbon-accessibility test category
+### QH-047 - Add harness support for the /assay-accessibility test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-accessibility`
+- **Description:** Implement deterministic harness coverage for the `/assay-accessibility`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -338,14 +338,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-048 - Add harness support for the /carbon-ui test category
+### QH-048 - Add harness support for the /assay-ui test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-ui`
+- **Description:** Implement deterministic harness coverage for the `/assay-ui`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -358,14 +358,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-049 - Add harness support for the /carbon-ux test category
+### QH-049 - Add harness support for the /assay-ux test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-ux`
+- **Description:** Implement deterministic harness coverage for the `/assay-ux`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -378,14 +378,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-050 - Add harness support for the /carbon-usability test category
+### QH-050 - Add harness support for the /assay-usability test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-usability`
+- **Description:** Implement deterministic harness coverage for the `/assay-usability`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -398,14 +398,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-051 - Add harness support for the /carbon-personas test category
+### QH-051 - Add harness support for the /assay-personas test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-personas`
+- **Description:** Implement deterministic harness coverage for the `/assay-personas`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -418,14 +418,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-052 - Add harness support for the /carbon-compatibility test category
+### QH-052 - Add harness support for the /assay-compatibility test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-compatibility`
+- **Description:** Implement deterministic harness coverage for the `/assay-compatibility`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -438,14 +438,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-053 - Add harness support for the /carbon-intl test category
+### QH-053 - Add harness support for the /assay-intl test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-intl`
+- **Description:** Implement deterministic harness coverage for the `/assay-intl`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -458,14 +458,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-054 - Add harness support for the /carbon-localization test category
+### QH-054 - Add harness support for the /assay-localization test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-localization`
+- **Description:** Implement deterministic harness coverage for the `/assay-localization`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -478,14 +478,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-055 - Add harness support for the /carbon-content test category
+### QH-055 - Add harness support for the /assay-content test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-content`
+- **Description:** Implement deterministic harness coverage for the `/assay-content`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -498,14 +498,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-056 - Add harness support for the /carbon-geo test category
+### QH-056 - Add harness support for the /assay-geo test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-geo`
+- **Description:** Implement deterministic harness coverage for the `/assay-geo`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -518,14 +518,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-057 - Add harness support for the /carbon-security test category
+### QH-057 - Add harness support for the /assay-security test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-security`
+- **Description:** Implement deterministic harness coverage for the `/assay-security`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -538,14 +538,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-058 - Add harness support for the /carbon-security-review test category
+### QH-058 - Add harness support for the /assay-security-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-security-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-security-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -558,14 +558,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-059 - Add harness support for the /carbon-privacy test category
+### QH-059 - Add harness support for the /assay-privacy test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-privacy`
+- **Description:** Implement deterministic harness coverage for the `/assay-privacy`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -578,14 +578,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-060 - Add harness support for the /carbon-state test category
+### QH-060 - Add harness support for the /assay-state test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-state`
+- **Description:** Implement deterministic harness coverage for the `/assay-state`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -598,14 +598,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-061 - Add harness support for the /carbon-reliability test category
+### QH-061 - Add harness support for the /assay-reliability test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-reliability`
+- **Description:** Implement deterministic harness coverage for the `/assay-reliability`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -618,14 +618,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-062 - Add harness support for the /carbon-performance test category
+### QH-062 - Add harness support for the /assay-performance test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-performance`
+- **Description:** Implement deterministic harness coverage for the `/assay-performance`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -638,14 +638,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-063 - Add harness support for the /carbon-load test category
+### QH-063 - Add harness support for the /assay-load test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-load`
+- **Description:** Implement deterministic harness coverage for the `/assay-load`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -658,14 +658,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-064 - Add harness support for the /carbon-stress test category
+### QH-064 - Add harness support for the /assay-stress test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-stress`
+- **Description:** Implement deterministic harness coverage for the `/assay-stress`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -678,14 +678,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-065 - Add harness support for the /carbon-networking test category
+### QH-065 - Add harness support for the /assay-networking test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-networking`
+- **Description:** Implement deterministic harness coverage for the `/assay-networking`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -698,14 +698,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-066 - Add harness support for the /carbon-api test category
+### QH-066 - Add harness support for the /assay-api test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-api`
+- **Description:** Implement deterministic harness coverage for the `/assay-api`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -718,14 +718,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-067 - Add harness support for the /carbon-data test category
+### QH-067 - Add harness support for the /assay-data test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-data`
+- **Description:** Implement deterministic harness coverage for the `/assay-data`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -778,14 +778,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-070 - Add harness support for the /carbon-confidence test category
+### QH-070 - Add harness support for the /assay-confidence test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-confidence`
+- **Description:** Implement deterministic harness coverage for the `/assay-confidence`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -798,14 +798,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-071 - Add harness support for the /carbon-confidence-init test category
+### QH-071 - Add harness support for the /assay-confidence-init test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-confidence-init`
+- **Description:** Implement deterministic harness coverage for the `/assay-confidence-init`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -818,14 +818,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-072 - Add harness support for the /carbon-confidence-plan test category
+### QH-072 - Add harness support for the /assay-confidence-plan test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-confidence-plan`
+- **Description:** Implement deterministic harness coverage for the `/assay-confidence-plan`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -838,14 +838,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-073 - Add harness support for the /carbon-review test category
+### QH-073 - Add harness support for the /assay-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -858,14 +858,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-074 - Add harness support for the /carbon-skeptical-review test category
+### QH-074 - Add harness support for the /assay-skeptical-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-skeptical-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-skeptical-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -878,14 +878,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-075 - Add harness support for the /carbon-release test category
+### QH-075 - Add harness support for the /assay-release test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-release`
+- **Description:** Implement deterministic harness coverage for the `/assay-release`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -898,14 +898,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-076 - Add harness support for the /carbon-release-review test category
+### QH-076 - Add harness support for the /assay-release-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-release-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-release-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -918,14 +918,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-077 - Add harness support for the /carbon-incident test category
+### QH-077 - Add harness support for the /assay-incident test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-incident`
+- **Description:** Implement deterministic harness coverage for the `/assay-incident`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -938,14 +938,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-078 - Add harness support for the /carbon-eval test category
+### QH-078 - Add harness support for the /assay-eval test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-eval`
+- **Description:** Implement deterministic harness coverage for the `/assay-eval`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -958,14 +958,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-079 - Add harness support for the /carbon-eval-design-review test category
+### QH-079 - Add harness support for the /assay-eval-design-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-eval-design-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-eval-design-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -978,14 +978,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-080 - Add harness support for the /carbon-statistical-review test category
+### QH-080 - Add harness support for the /assay-statistical-review test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-statistical-review`
+- **Description:** Implement deterministic harness coverage for the `/assay-statistical-review`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -998,14 +998,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-081 - Add harness support for the /carbon-agentic test category
+### QH-081 - Add harness support for the /assay-agentic test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-agentic`
+- **Description:** Implement deterministic harness coverage for the `/assay-agentic`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1058,14 +1058,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-084 - Add harness support for the /carbon-tests test category
+### QH-084 - Add harness support for the /assay-tests test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-tests`
+- **Description:** Implement deterministic harness coverage for the `/assay-tests`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1078,14 +1078,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-085 - Add harness support for the /carbon-generate test category
+### QH-085 - Add harness support for the /assay-generate test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-generate`
+- **Description:** Implement deterministic harness coverage for the `/assay-generate`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1098,14 +1098,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-086 - Add harness support for the /carbon-map test category
+### QH-086 - Add harness support for the /assay-map test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-map`
+- **Description:** Implement deterministic harness coverage for the `/assay-map`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1118,14 +1118,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-087 - Add harness support for the /carbon-full-report test category
+### QH-087 - Add harness support for the /assay-full-report test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-full-report`
+- **Description:** Implement deterministic harness coverage for the `/assay-full-report`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1138,14 +1138,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-088 - Add harness support for the /carbon-stats test category
+### QH-088 - Add harness support for the /assay-stats test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-stats`
+- **Description:** Implement deterministic harness coverage for the `/assay-stats`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1158,14 +1158,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-089 - Add harness support for the /carbon-integrations test category
+### QH-089 - Add harness support for the /assay-integrations test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-integrations`
+- **Description:** Implement deterministic harness coverage for the `/assay-integrations`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1198,14 +1198,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-091 - Add harness support for the /carbon-auto test category
+### QH-091 - Add harness support for the /assay-auto test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-auto`
+- **Description:** Implement deterministic harness coverage for the `/assay-auto`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1218,14 +1218,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-092 - Add harness support for the /carbon-background test category
+### QH-092 - Add harness support for the /assay-background test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-background`
+- **Description:** Implement deterministic harness coverage for the `/assay-background`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1238,14 +1238,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-093 - Add harness support for the /carbon-forever test category
+### QH-093 - Add harness support for the /assay-forever test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-forever`
+- **Description:** Implement deterministic harness coverage for the `/assay-forever`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1258,14 +1258,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-094 - Add harness support for the /carbon-settings test category
+### QH-094 - Add harness support for the /assay-settings test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-settings`
+- **Description:** Implement deterministic harness coverage for the `/assay-settings`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1278,14 +1278,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-095 - Add harness support for the /carbon-human test category
+### QH-095 - Add harness support for the /assay-human test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-human`
+- **Description:** Implement deterministic harness coverage for the `/assay-human`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -1298,14 +1298,14 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-096 - Add harness support for the /carbon-pro test category
+### QH-096 - Add harness support for the /assay-pro test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
 - **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon-pro`
+- **Description:** Implement deterministic harness coverage for the `/assay-pro`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
@@ -2271,7 +2271,7 @@ No task is claimed. `QH-001` through `QH-036` are complete.
 - **Evidence:** `tests/test_seeded_resume.py`. Full suite: 269 passing tests
   with Python 3.11. `BOARD.md` D38 records the determinism-resume decision.
 
-### QH-037 - Add harness support for the /carbon test category
+### QH-037 - Add harness support for the /assay test category
 
 - **Epic:** E8 Carbon Test Category Coverage
 - **Priority:** P2
@@ -2279,10 +2279,10 @@ No task is claimed. `QH-001` through `QH-036` are complete.
 - **Depends on:** QH-036
 - **Status:** Done
 - **Completed:** 2026-11-12
-- **Description:** Added a `/carbon` command alias for the risk-based run
-  workflow, plus an OpenCode `/carbon` slash command. The alias exposes the
-  existing deterministic checks, findings, evidence, and confidence report
-  without changing the core workflow.
+- **Description:** Added an OpenCode `/assay` slash command and native
+  plugin command that run the existing risk-based workflow. This exposes the
+  deterministic checks, findings, evidence, and confidence report without
+  adding a separate execution path or changing scoring.
 - **Acceptance Criteria:**
   - The category is represented by at least one owned check or an explicit
     documented no-op with rationale.
@@ -2291,9 +2291,10 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   - The report and confidence calculation account for the category without
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
-- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_carbon_command -v`
-- **Evidence:** `tests/test_carbon_command.py`. Full suite: 270 passing tests
-  with Python 3.11. `BOARD.md` D39 records the category-command decision.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_github_action -v`
+- **Evidence:** `.opencode/commands/assay.md` and
+  `.opencode/plugins/assay/index.ts`. Full suite: 270 passing tests with
+  Python 3.11. `BOARD.md` D39 records the category-command decision.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
@@ -2357,4 +2358,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D36 | 2026-11-12 | Failure injection is covered by deterministic tests: corrupt `progress.json` raises a typed `StateError` without overwriting the last good file; a failed evidence write yields zero-confidence, non-shipping report; kill during evidence collection records a halted hold report; and a truncated manifest fails evidence verification. Recovery is documented as restoring the last good progress file or rerunning after fixing the underlying failure. | Failing closed prevents a partial or corrupted run from claiming confidence. Keeping the corrupt file in place preserves forensic evidence, while hold reports make kill behavior auditable. | Add disk-full and permission-denied injection once a cross-platform fault-injection helper is available. |
 | D37 | 2026-11-12 | Resume persists a SHA-256 registry fingerprint containing check ids, sources, blocked reasons, evaluator availability, and trust-key ids. A mismatch raises `StateError` before personas are loaded or any check is replayed, and failed resume attempts leave progress, report, and evidence byte-identical. | A changed evaluator or untrusted plugin must not be silently used for pending work. Comparing before persona validation prevents partial planning against a different registry. Keeping the failed attempt read-only preserves forensic evidence. | Add cryptographic signing of the registry fingerprint if plugin trust moves beyond HMAC. |
 | D38 | 2026-11-12 | Seeded runs persist `seed`, `clock_mode`, `frozen_clock`, and an `id_sequence` counter in run options. `make_determinism` accepts an `entropy_counter`, and the orchestrator saves the current counter with every state write. Resume restores those options before creating the determinism provider, so a resumed run continues the SHA-256 id sequence instead of restarting it. | Continuing the counter prevents finding-id collisions and makes resumed deterministic runs comparable to an uninterrupted run. Restoring clock and seed options prevents mixing determinism modes. Persisting the counter at each state save keeps partial runs recoverable. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent counters. |
-| D39 | 2026-11-12 | The `/carbon` category is represented by a `carbon` CLI alias and an OpenCode `/carbon` slash command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The alias makes the Carbon-style entry point available in both terminal and OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |
+| D39 | 2026-11-12 | The assay category is represented by an OpenCode `/assay` slash command and native plugin command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The command makes the assay entry point available in OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |
