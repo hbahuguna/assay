@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-037 - Add harness support for the /carbon test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/carbon`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-038 - Add harness support for the /jay (alias for /jay) test category
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2291,6 +2271,30 @@ No task is claimed. `QH-001` through `QH-036` are complete.
 - **Evidence:** `tests/test_seeded_resume.py`. Full suite: 269 passing tests
   with Python 3.11. `BOARD.md` D38 records the determinism-resume decision.
 
+### QH-037 - Add harness support for the /carbon test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added a `/carbon` command alias for the risk-based run
+  workflow, plus an OpenCode `/carbon` slash command. The alias exposes the
+  existing deterministic checks, findings, evidence, and confidence report
+  without changing the core workflow.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_carbon_command -v`
+- **Evidence:** `tests/test_carbon_command.py`. Full suite: 270 passing tests
+  with Python 3.11. `BOARD.md` D39 records the category-command decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2353,3 +2357,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D36 | 2026-11-12 | Failure injection is covered by deterministic tests: corrupt `progress.json` raises a typed `StateError` without overwriting the last good file; a failed evidence write yields zero-confidence, non-shipping report; kill during evidence collection records a halted hold report; and a truncated manifest fails evidence verification. Recovery is documented as restoring the last good progress file or rerunning after fixing the underlying failure. | Failing closed prevents a partial or corrupted run from claiming confidence. Keeping the corrupt file in place preserves forensic evidence, while hold reports make kill behavior auditable. | Add disk-full and permission-denied injection once a cross-platform fault-injection helper is available. |
 | D37 | 2026-11-12 | Resume persists a SHA-256 registry fingerprint containing check ids, sources, blocked reasons, evaluator availability, and trust-key ids. A mismatch raises `StateError` before personas are loaded or any check is replayed, and failed resume attempts leave progress, report, and evidence byte-identical. | A changed evaluator or untrusted plugin must not be silently used for pending work. Comparing before persona validation prevents partial planning against a different registry. Keeping the failed attempt read-only preserves forensic evidence. | Add cryptographic signing of the registry fingerprint if plugin trust moves beyond HMAC. |
 | D38 | 2026-11-12 | Seeded runs persist `seed`, `clock_mode`, `frozen_clock`, and an `id_sequence` counter in run options. `make_determinism` accepts an `entropy_counter`, and the orchestrator saves the current counter with every state write. Resume restores those options before creating the determinism provider, so a resumed run continues the SHA-256 id sequence instead of restarting it. | Continuing the counter prevents finding-id collisions and makes resumed deterministic runs comparable to an uninterrupted run. Restoring clock and seed options prevents mixing determinism modes. Persisting the counter at each state save keeps partial runs recoverable. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent counters. |
+| D39 | 2026-11-12 | The `/carbon` category is represented by a `carbon` CLI alias and an OpenCode `/carbon` slash command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The alias makes the Carbon-style entry point available in both terminal and OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |

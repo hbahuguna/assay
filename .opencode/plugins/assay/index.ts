@@ -28,6 +28,15 @@ export default Plugin.define({
           await ctx.session.synthetic({ sessionID, text: output })
         },
       })
+      editor.add({
+        name: "carbon",
+        description: "Alias for /assay run with risk-based checks",
+        execute: async ({ sessionID, prompt }) => {
+          const args = ["carbon", ...(prompt.text || "").trim().split(/\s+/).filter(Boolean)]
+          const output = runAssay(args)
+          await ctx.session.synthetic({ sessionID, text: output })
+        },
+      })
     })
   },
 })

@@ -127,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a JSON SSRF allowlist configuration.",
     )
     run.add_argument("--resume", action="store_true", help="Resume the last incomplete run.")
+
     run.add_argument(
         "--keep-runs",
         type=int,
@@ -158,6 +159,14 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--root", default=".", help="Project root for .harness state (default: current directory).")
     run.add_argument("--output", help="Also write the JSON report to this path.")
     run.add_argument("--quiet", action="store_true", help="Suppress progress lines on stderr.")
+
+    # `/carbon` is an alias for the risk-based run workflow.
+    carbon = subparsers.add_parser(
+        "carbon",
+        help="Alias for `run`: risk-based checks with reproducible findings and confidence.",
+        parents=[run],
+        add_help=False,
+    )
 
     status = subparsers.add_parser("status", help="Print the latest persisted run state as JSON.")
     status.add_argument("--root", default=".")
@@ -1563,7 +1572,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.print_help()
         return 0
     try:
-        if args.command == "run":
+        if args.command == "run" or args.command == "carbon":
             return _run(args)
         if args.command == "status":
             return _status(args)
