@@ -45,3 +45,19 @@ class MeteringError(HarnessError):
 
 class QuotaError(HarnessError):
     pass
+
+
+class LedgerError(HarnessError):
+    pass
+
+
+class LedgerPeriodClosed(LedgerError):
+    """A usage event arrived after its billing period was closed."""
+
+    def __init__(self, workspace: str, period: str) -> None:
+        self.workspace = str(workspace)
+        self.period = str(period)
+        super().__init__(
+            "Ledger period {} for workspace {} is closed; add an explicit "
+            "adjustment instead of a late usage entry.".format(self.period, self.workspace)
+        )

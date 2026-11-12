@@ -368,6 +368,102 @@ def build_parser() -> argparse.ArgumentParser:
     quota_consume.add_argument("--now", default=None, help="Evaluate at an ISO-8601 time.")
     quota_consume.add_argument("--root", default=".")
 
+    ledger = subparsers.add_parser(
+        "ledger",
+        help="Aggregate metering events into a ledger and export invoices as JSON or CSV.",
+    )
+    ledger_subparsers = ledger.add_subparsers(dest="ledger_action", required=True)
+
+    ledger_ingest = ledger_subparsers.add_parser(
+        "ingest", help="Append new metering events to the usage ledger."
+    )
+    ledger_ingest.add_argument(
+        "--events",
+        default=".harness/metering/events.jsonl",
+        help="Metering JSON Lines file, relative to --root when not absolute.",
+    )
+    ledger_ingest.add_argument("--workspace", default=None, help="Only ingest this workspace.")
+    ledger_ingest.add_argument("--prices", default=None, help="Path to a price-book JSON file.")
+    ledger_ingest.add_argument(
+        "--strict",
+        action="store_true",
+        help="Stop at the first rejected event instead of reporting a partial ingest.",
+    )
+    ledger_ingest.add_argument("--root", default=".")
+
+    ledger_entries = ledger_subparsers.add_parser(
+        "entries", help="List immutable ledger entries."
+    )
+    ledger_entries.add_argument("--workspace", default=None)
+    ledger_entries.add_argument("--period", default=None)
+    ledger_entries.add_argument("--root", default=".")
+
+    ledger_periods = ledger_subparsers.add_parser(
+        "periods", help="List closed billing periods."
+    )
+    ledger_periods.add_argument("--workspace", default=None)
+    ledger_periods.add_argument("--root", default=".")
+
+    ledger_close = ledger_subparsers.add_parser(
+        "close", help="Close a billing period so late events require an adjustment."
+    )
+    ledger_close.add_argument("--workspace", required=True)
+    ledger_close.add_argument("--period", required=True)
+    ledger_close.add_argument("--by", default="")
+    ledger_close.add_argument("--at", default=None, help="Close timestamp (ISO-8601).")
+    ledger_close.add_argument("--root", default=".")
+
+    ledger_adjust = ledger_subparsers.add_parser(
+        "adjust", help="Append an explicit correction or late-period adjustment."
+    )
+    ledger_adjust.add_argument("--workspace", required=True)
+    ledger_adjust.add_argument("--period", required=True)
+    ledger_adjust.add_argument(
+        "--event-type",
+        default="",
+        help="Metering event type; derived from the referenced entry when omitted.",
+    )
+    ledger_adjust.add_argument("--quantity", type=float, required=True)
+    ledger_adjust.add_argument("--reason", required=True)
+    ledger_adjust.add_argument(
+        "--reference",
+        dest="references",
+        action="append",
+        required=True,
+        help="Original entry id or period close id; repeat for multiple references.",
+    )
+    ledger_adjust.add_argument("--unit", default=None)
+    ledger_adjust.add_argument("--unit-price", type=float, default=None)
+    ledger_adjust.add_argument("--prices", default=None, help="Path to a price-book JSON file.")
+    ledger_adjust.add_argument("--idempotency-key", default="")
+    ledger_adjust.add_argument("--at", default=None, help="Adjustment timestamp (ISO-8601).")
+    ledger_adjust.add_argument("--root", default=".")
+
+    ledger_invoice = ledger_subparsers.add_parser(
+        "invoice", help="Render a workspace period as JSON or CSV."
+    )
+    ledger_invoice.add_argument("--workspace", required=True)
+    ledger_invoice.add_argument("--period", required=True)
+    ledger_invoice.add_argument("--format", choices=["json", "csv"], default="json")
+    ledger_invoice.add_argument("--output", default=None, help="Write the invoice to this path.")
+    ledger_invoice.add_argument("--invoice-id", default=None)
+    ledger_invoice.add_argument("--generated-at", default=None)
+    ledger_invoice.add_argument("--root", default=".")
+
+    ledger_verify = ledger_subparsers.add_parser(
+        "verify", help="Verify the append-only sequence and hash chain."
+    )
+    ledger_verify.add_argument("--root", default=".")
+
+    ledger_reconcile = ledger_subparsers.add_parser(
+        "reconcile",
+        help="Compare an invoice total with the ledger's quantity-price total.",
+    )
+    ledger_reconcile.add_argument("--workspace", required=True)
+    ledger_reconcile.add_argument("--period", required=True)
+    ledger_reconcile.add_argument("--invoice-id", default=None)
+    ledger_reconcile.add_argument("--root", default=".")
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Run labeled confidence calibration fixtures and write a report.",
@@ -1056,6 +1152,160 @@ def _quota(args: argparse.Namespace) -> int:
         return 2
 
 
+def _ledger(args: argparse.Namespace) -> int:
+    from .ledger import (
+        INVOICE_SCHEMA_VERSION,
+        SCHEMA_VERSION,
+        LedgerError,
+        LedgerStore,
+        PriceBook,
+        invoice_to_csv,
+    )
+    from .metering import MeteringEmitter
+
+    root = Path(args.root).expanduser().resolve()
+    store = LedgerStore(root)
+    action = getattr(args, "ledger_action", None)
+    try:
+        if action == "ingest":
+            emitter = MeteringEmitter(root, "ledger-ingest", sink=args.events)
+            price_book = PriceBook.load(args.prices) if args.prices else None
+            result = store.ingest_events(
+                emitter.events(),
+                workspace=args.workspace,
+                price_book=price_book,
+                strict=args.strict,
+            )
+            result["command"] = "ledger"
+            result["events_path"] = str(emitter.sink)
+            _print_json(result)
+            return 0 if not result.get("rejected") else 1
+
+        if action == "entries":
+            entries = store.entries(
+                workspace=args.workspace, period=args.period
+            )
+            _print_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "status": "ok",
+                    "command": "ledger",
+                    "count": len(entries),
+                    "entries": entries,
+                }
+            )
+            return 0
+
+        if action == "periods":
+            periods = store.periods(workspace=args.workspace)
+            _print_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "status": "ok",
+                    "command": "ledger",
+                    "count": len(periods),
+                    "periods": periods,
+                }
+            )
+            return 0
+
+        if action == "close":
+            record = store.close_period(
+                args.workspace,
+                args.period,
+                closed_by=args.by,
+                closed_at=args.at,
+            )
+            _print_json(
+                {
+                    "schema_version": SCHEMA_VERSION,
+                    "status": "closed" if record.get("created") else "already_closed",
+                    "command": "ledger",
+                    "period": record,
+                }
+            )
+            return 0
+
+        if action == "adjust":
+            price_book = PriceBook.load(args.prices) if args.prices else None
+            result = store.add_adjustment(
+                args.workspace,
+                args.period,
+                args.event_type,
+                args.quantity,
+                reason=args.reason,
+                references=args.references,
+                unit=args.unit,
+                unit_price=args.unit_price,
+                price_book=price_book,
+                idempotency_key=args.idempotency_key,
+                timestamp=args.at,
+            )
+            result["command"] = "ledger"
+            _print_json(result)
+            return 0
+
+        if action == "invoice":
+            invoice = store.invoice(
+                args.workspace,
+                args.period,
+                invoice_id=args.invoice_id,
+                generated_at=args.generated_at,
+            )
+            if args.format == "csv":
+                text = invoice_to_csv(invoice)
+            else:
+                text = json.dumps(invoice, indent=2, ensure_ascii=False) + "\n"
+            if args.output:
+                output_path = Path(args.output).expanduser()
+                if not output_path.is_absolute():
+                    output_path = Path.cwd() / output_path
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(text, encoding="utf-8")
+                _print_json(
+                    {
+                        "schema_version": INVOICE_SCHEMA_VERSION,
+                        "status": "written",
+                        "command": "ledger",
+                        "path": str(output_path),
+                        "invoice": invoice,
+                    }
+                )
+            elif args.format == "csv":
+                print(text, end="")
+            else:
+                _print_json(invoice)
+            return 0
+
+        if action == "verify":
+            result = store.verify()
+            result["command"] = "ledger"
+            _print_json(result)
+            return 0 if result.get("ok") else 1
+
+        if action == "reconcile":
+            result = store.reconcile(
+                args.workspace,
+                args.period,
+                invoice_id=args.invoice_id,
+            )
+            result["command"] = "ledger"
+            _print_json(result)
+            return 0 if result.get("ok") else 1
+
+        raise HarnessError("Unknown ledger action: {}".format(action))
+    except (LedgerError, ValueError, OSError) as exc:
+        _print_json(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "status": "error",
+                "command": "ledger",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+        )
+        return getattr(exc, "exit_code", 2)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1091,6 +1341,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _auth(args)
         if args.command == "quota":
             return _quota(args)
+        if args.command == "ledger":
+            return _ledger(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

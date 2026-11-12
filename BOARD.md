@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-022 - Build the append-only usage ledger and invoice export
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-021
-- **Status:** Ready
-- **Description:** Aggregate metering events into an append-only ledger with
-  period close, correction entries, and a CSV/JSON invoice export that a finance
-  operator can reconcile.
-- **Acceptance Criteria:**
-  - Ledger entries are immutable; corrections reference the original entry.
-  - A closed period cannot accept late events without an explicit adjustment.
-  - Invoice totals equal the sum of ledger quantities and unit prices.
-  - Export includes workspace, period, line items, subtotal, and credits.
-  - Reconciliation tests cover duplicate, late, and corrected events.
-
 ### QH-023 - Add self-serve signup, free allowance, and plan selection
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -405,8 +388,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-020` are complete, so `QH-021` is now
-the lowest-numbered unblocked task. `QH-021` continues the
+No task is claimed. `QH-001` through `QH-022` are complete, so `QH-023` is now
+the lowest-numbered unblocked task. `QH-023` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -969,6 +952,37 @@ commercial-critical-path chain.
   Python 3.11. `README.md` documents the plan JSON and headers; `BOARD.md` D23
   records the enforcement decision.
 
+### QH-022 - Build the append-only usage ledger and invoice export
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-021
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/ledger.py` and a `ledger` CLI that append metering
+  events into an immutable, hash-chained ledger, close monthly periods, record
+  explicit corrections and late-event adjustments, and render reconcilable
+  JSON/CSV invoices. Prices are supplied through a versioned price book; the
+  OSS core does not embed commercial pricing. Tenant identity binds through
+  `AuthContext`, and append-only state is protected by a process plus advisory
+  file lock.
+- **Acceptance Criteria:**
+  - Ledger entries are immutable; corrections reference the original entry.
+  - A closed period cannot accept late events without an explicit adjustment.
+  - Invoice totals equal the sum of ledger quantities and unit prices.
+  - Export includes workspace, period, line items, subtotal, and credits.
+  - Reconciliation tests cover duplicate, late, and corrected events.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_ledger -v`
+- **Evidence:** `tests/test_ledger.py` covers price-book parsing, immutable
+  hash-chained entries and tamper detection, duplicate idempotency and conflict
+  detection, closed-period rejection, explicit late adjustments, corrections
+  that reduce an invoice, duplicate/late/corrected reconciliation, auth context
+  binding, and CLI ingest/close/adjust/invoice/entries/periods/verify/reconcile
+  flows. Full suite: 178 passing tests with Python 3.11. `README.md` documents
+  the ledger CLI and price book; `BOARD.md` D24 records the storage and
+  correction decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1016,3 +1030,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D21 | 2026-11-12 | Usage metering is a versioned JSON Lines contract (`quality-harness.metering/v1`) with a frozen event name set and an idempotency key on every event. OSS runs write the same events to `.harness/metering/events.jsonl`; workspace defaults to `local` and source to `oss`. | A local file sink proves the billing contract without a cloud account, while idempotency lets a future delivery layer retry safely. Keeping metering separate from operational `events.jsonl` prevents audit logs from becoming billing records. | Add a cloud sink adapter in `QH-024`; any new billable action needs a new schema version or a frozen v1 addendum, never a silent rename. |
 | D22 | 2026-11-12 | Cloud identity resolves through `harness.auth`: every request authenticates to exactly one workspace, API keys are stored as salted SHA-256 hashes with a public prefix, and run ids are claimed by one workspace. Wrong-scope requests return 403; missing, expired, revoked, and guessed/foreign run ids return 401/404 without workspace data. | Returning the same 404 for a guessed run id and another tenant's real id prevents tenant enumeration. A one-time secret plus a hashed store keeps plaintext keys out of state, logs, and the audit trail. Resolving workspace before quota in `QH-021` makes limits impossible to apply to the wrong tenant. | Add a KMS-backed keyed-hash pepper, rotation grace windows, and per-key rate limiting when the cloud execution layer lands in `QH-025`. |
 | D23 | 2026-11-12 | Quota enforcement is a durable per-action usage store (`quality-harness.quota/v1`) loaded from a monthly plan. A hard limit returns 429 before the requested quantity is recorded; earlier usage remains. Soft warnings are appended once per resource per period, and every decision carries remaining-quota headers. The `local` workspace and the no-plan OSS path are unlimited and write nothing. Cloud callers bind the store to `AuthContext.workspace_id`, never a request-body workspace. | Per-action enforcement preserves partial value and billing accuracy, while one atomic read-modify-write under a process and file lock prevents parallel workers from overspending. Keeping warnings in a separate quota event log avoids changing the frozen metering v1 contract because a warning is not a billable action. | Wire `QuotaStore` into the isolated cloud queue in `QH-025`; add plan/tier provisioning in `QH-023` and period-close corrections in `QH-022`. |
+| D24 | 2026-11-12 | Usage billing is an append-only hash-chained ledger (`quality-harness.ledger/v1`) under `.harness/ledger/entries.jsonl`, with immutable monthly close records in `periods.json`. Corrections are signed entries that reference the original entry or close id; a closed period rejects ordinary usage but accepts an explicit adjustment. Invoices derive from stored entry quantities and unit prices, and reconciliation checks the sum of quantity times unit price against the invoice total. Prices are supplied through a versioned price book; the OSS core does not embed commercial pricing. | Append-only records and hash continuity make tampering and accidental edits detectable, while explicit references preserve an auditable correction chain. Keeping close state separate from usage rows lets late events be rejected without losing earlier entries, and storing unit prices on entries keeps historical invoices reproducible even if a price book changes. | Wire ledger ingestion into `QH-024` cloud delivery, add billing-provider invoice IDs and tax handling there, and consider per-period entry compaction if run volume makes JSON Lines scanning too slow. |

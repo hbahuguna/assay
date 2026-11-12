@@ -353,6 +353,49 @@ through `consume_metering_event`. Cloud adapters should authenticate first and
 build the store with `QuotaStore.from_auth_context(root, context, plan)` so the
 tenant id comes from the scoped `AuthContext`, never from the request body.
 
+### Append-only usage ledger and invoices
+
+Metering events are aggregated into an append-only, hash-chained ledger under
+`.harness/ledger/entries.jsonl`. A monthly period can be closed, after which
+ordinary usage events are rejected unless they are already present. Late work is
+recorded as an explicit adjustment that references the period close id or a
+correction that references the original ledger entry. Each entry stores its
+quantity, unit price, currency, and amount, so historical invoices remain
+reproducible when a price book changes.
+
+```bash
+# Aggregate metering events into the ledger.
+python -m harness ledger ingest --root .harness-cloud --workspace ws_acme \
+  --prices prices.json
+
+# Close the billing month.
+python -m harness ledger close --root .harness-cloud --workspace ws_acme \
+  --period 2026-11 --at 2026-12-01T00:00:00Z
+
+# Record an explicit correction or late adjustment.
+python -m harness ledger adjust --root .harness-cloud --workspace ws_acme \
+  --period 2026-11 --quantity -1 --reason "duplicate check" \
+  --reference ledger-1234567890
+
+# Render an invoice as JSON or CSV.
+python -m harness ledger invoice --root .harness-cloud --workspace ws_acme \
+  --period 2026-11 --format json
+python -m harness ledger invoice --root .harness-cloud --workspace ws_acme \
+  --period 2026-11 --format csv --output invoice.csv
+
+# Audit the ledger and compare an invoice to quantity times price.
+python -m harness ledger verify --root .harness-cloud
+python -m harness ledger reconcile --root .harness-cloud \
+  --workspace ws_acme --period 2026-11
+```
+
+Ledger state is `.harness/ledger/entries.jsonl` and `.harness/ledger/periods.json`.
+`ledger verify` checks sequence and SHA-256 continuity. Prices are supplied
+through a versioned price book (`quality-harness.price-book/v1`); the OSS core
+does not embed commercial pricing. `harness.ledger.LedgerStore` is the
+primitive for cloud delivery and supports `from_auth_context` binding so tenant
+identity comes from the scoped `AuthContext`.
+
 ### Live browser checks
 
 ```bash
