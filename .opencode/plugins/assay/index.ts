@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode/plugin"
 import { execFile } from "node:child_process"
+import { promises as fs } from "node:fs"
 import { promisify } from "node:util"
 
 const execFileAsync = promisify(execFile)
@@ -18,6 +19,52 @@ async function runAssay(args: string[], cwd: string): Promise<string> {
     const failure = error as { stderr?: string; message?: string; stdout?: string }
     return `assay failed:\n${failure.stderr || failure.stdout || failure.message || String(error)}`
   }
+}
+
+async function runFollowUp(cwd: string): Promise<string> {
+  const sections: string[] = []
+  try {
+    const { stdout } = await execFileAsync("git", ["diff", "--stat"], { cwd, encoding: "utf-8" })
+    if (stdout.trim()) sections.push(`git diff --stat:\n${stdout.trim()}`)
+  } catch {
+    // Not a git repository or no changes.
+  }
+
+  try {
+    const packageJsonPath = `${cwd}/package.json`
+    const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf8"))
+    if (packageJson?.scripts?.test) {
+      const command = (await fs.access(`${cwd}/pnpm-lock.yaml`).then(() => "pnpm").catch(() => "npm"))
+      const { stdout, stderr } = await execFileAsync(command, ["test"], {
+        cwd,
+        encoding: "utf-8",
+        env: { ...process.env, CI: "1" },
+      })
+      sections.push(`${command} test:\n${(stdout || stderr || "").trim()}`)
+    }
+  } catch {
+    // No package test script or package manager failure.
+  }
+
+  try {
+    const hasPytestConfig =
+      (await fs.access(`${cwd}/pytest.ini`).then(() => true).catch(() => false)) ||
+      (await fs.readFile(`${cwd}/pyproject.toml`, "utf8").then((text) => text.includes("[tool.pytest")).catch(() => false))
+    if (hasPytestConfig) {
+      const { stdout, stderr } = await execFileAsync(PYTHON, ["-m", "pytest", "-q"], {
+        cwd,
+        encoding: "utf-8",
+        env: { ...process.env, PYTHONPATH: "/Users/skaparwan/github/assay" },
+      })
+      sections.push(`pytest:\n${(stdout || stderr || "").trim()}`)
+    }
+  } catch {
+    // No Python test configuration.
+  }
+
+  if (sections.length === 0) return ""
+  const combined = sections.join("\n\n")
+  return combined.length > 8000 ? `${combined.slice(0, 8000)}\n... (truncated)` : combined
 }
 
 export default Plugin.define({
