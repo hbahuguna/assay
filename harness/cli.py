@@ -502,6 +502,38 @@ def build_parser() -> argparse.ArgumentParser:
     signup_verify.add_argument("--workspace", default=None)
     signup_verify.add_argument("--period", default=None)
 
+    billing = subparsers.add_parser(
+        "billing", help="Feature-gated metered billing operations."
+    )
+    billing_subparsers = billing.add_subparsers(dest="billing_action", required=True)
+
+    billing_status = billing_subparsers.add_parser(
+        "status", help="Show billing status for a workspace."
+    )
+    billing_status.add_argument("--workspace", required=True)
+    billing_status.add_argument("--root", default=".")
+
+    billing_sync = billing_subparsers.add_parser(
+        "sync", help="Reconcile a ledger invoice with the billing provider."
+    )
+    billing_sync.add_argument("--workspace", required=True)
+    billing_sync.add_argument("--period", required=True)
+    billing_sync.add_argument("--invoice-id", default=None)
+    billing_sync.add_argument("--secret-ref", default="billing/api_key")
+    billing_sync.add_argument("--secret-store", default=None)
+    billing_sync.add_argument("--root", default=".")
+
+    billing_disable = billing_subparsers.add_parser(
+        "disable", help="Activate the billing kill switch."
+    )
+    billing_disable.add_argument("--reason", default="operator disabled billing writes")
+    billing_disable.add_argument("--root", default=".")
+
+    billing_enable = billing_subparsers.add_parser(
+        "enable", help="Clear the billing kill switch."
+    )
+    billing_enable.add_argument("--root", default=".")
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Run labeled confidence calibration fixtures and write a report.",
@@ -1403,6 +1435,79 @@ def _signup(args: argparse.Namespace) -> int:
         return getattr(exc, "exit_code", 2)
 
 
+def _billing(args: argparse.Namespace) -> int:
+    from .billing import (
+        BillingFeatureFlag,
+        BillingStore,
+        EnvSecretManager,
+        FileSecretManager,
+        SandboxBillingProvider,
+    )
+
+    root = Path(args.root).expanduser().resolve()
+    flag_path = root / ".harness" / "billing" / "flag.json"
+    if flag_path.exists():
+        try:
+            flag = BillingFeatureFlag.from_dict(
+                json.loads(flag_path.read_text(encoding="utf-8"))
+            )
+        except (OSError, ValueError, Exception):
+            flag = BillingFeatureFlag.from_env()
+    else:
+        flag = BillingFeatureFlag.from_env()
+    if getattr(args, "secret_store", None):
+        secret_manager = FileSecretManager(args.secret_store)
+    else:
+        secret_manager = EnvSecretManager()
+    provider = SandboxBillingProvider(root)
+    store = BillingStore(
+        root,
+        feature_flag=flag,
+        secret_manager=secret_manager,
+        provider=provider,
+    )
+    action = getattr(args, "billing_action", None)
+    try:
+        if action == "status":
+            _print_json(store.status(args.workspace))
+            return 0
+        if action == "sync":
+            result = store.sync_invoice(
+                args.workspace,
+                args.period,
+                invoice_id=args.invoice_id,
+                secret_ref=args.secret_ref,
+            )
+            _print_json(result)
+            return 0 if result.get("status") in {"reconciled", "already_reconciled", "disabled"} else 1
+        if action == "disable":
+            result = store.disable(args.reason)
+            result["kill_switch_active"] = store.kill_switch_active()
+            _print_json(result)
+            return 0
+        if action == "enable":
+            store.enable_writes()
+            _print_json(
+                {
+                    "schema_version": "quality-harness.billing/v1",
+                    "status": "enabled",
+                    "kill_switch_active": store.kill_switch_active(),
+                }
+            )
+            return 0
+        raise HarnessError("Unknown billing action: {}".format(action))
+    except Exception as exc:
+        _print_json(
+            {
+                "schema_version": "quality-harness.billing/v1",
+                "status": "error",
+                "command": "billing",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+        )
+        return getattr(exc, "exit_code", 2)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1442,6 +1547,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _ledger(args)
         if args.command == "signup":
             return _signup(args)
+        if args.command == "billing":
+            return _billing(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

@@ -73,3 +73,19 @@ class PlanDowngradeError(SignupError):
 
 class EntitlementError(SignupError):
     pass
+
+
+class BillingError(HarnessError):
+    pass
+
+
+class BillingDisabled(BillingError):
+    pass
+
+
+class BillingDegraded(BillingError):
+    pass
+
+
+class BillingTransientError(BillingError):
+    retryable = True

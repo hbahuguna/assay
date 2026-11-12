@@ -138,24 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-024 - Integrate metered subscription billing behind a feature flag
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P1
-- **Points:** 8
-- **Depends on:** QH-022, QH-023
-- **Status:** Ready
-- **Description:** Connect the usage ledger to a billing provider for metered
-  subscriptions and invoices, disabled by default and enabled only for a named
-  workspace in sandbox mode.
-- **Acceptance Criteria:**
-  - The feature flag off path creates no external customer or subscription.
-  - Sandbox mode reconciles a test invoice against the ledger to the cent.
-  - Failed billing-provider calls retry idempotently and surface a degraded
-    status without blocking runs that already paid quota.
-  - Secrets are loaded from the secret manager, never environment dumps or logs.
-  - A kill switch disables billing writes without stopping the harness.
-
 ### QH-025 - Add the cloud run queue with per-tenant worker isolation
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -367,8 +349,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-023` are complete, so `QH-024` is now
-the lowest-numbered unblocked task. `QH-024` continues the
+No task is claimed. `QH-001` through `QH-024` are complete, so `QH-025` is now
+the lowest-numbered unblocked task. `QH-025` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -992,6 +974,36 @@ commercial-critical-path chain.
   create/usage/verify/replay flows. Full suite: 188 passing tests with Python 3.11.
   `README.md` and `BOARD.md` D25 document the onboarding contract.
 
+### QH-024 - Integrate metered subscription billing behind a feature flag
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P1
+- **Points:** 8
+- **Depends on:** QH-022, QH-023
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/billing.py` and a `billing` CLI for feature-gated
+  metered billing. Billing is disabled by default and enabled only for
+  allow-listed workspaces in sandbox mode. The sandbox provider creates
+  customers/subscriptions and reconciles ledger invoices to the cent. Transient
+  provider failures retry idempotently and then report degraded status without
+  blocking runs or quota. A billing kill switch disables writes independently,
+  and secrets are resolved through a secret manager rather than raw values.
+- **Acceptance Criteria:**
+  - The feature flag off path creates no external customer or subscription.
+  - Sandbox mode reconciles a test invoice against the ledger to the cent.
+  - Failed billing-provider calls retry idempotently and surface a degraded
+    status without blocking runs that already paid quota.
+  - Secrets are loaded from the secret manager, never environment dumps or logs.
+  - A kill switch disables billing writes without stopping the harness.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_billing -v`
+- **Evidence:** `tests/test_billing.py` covers disabled feature-flag behavior,
+  workspace-scoped enablement, cent reconciliation, idempotent customer/
+  subscription/invoice sync, transient retry and degraded status, kill-switch
+  writes, secret-manager use and non-persistence, status reporting, and CLI
+  status/sync/disable flows. Full suite: 198 passing tests with Python 3.11.
+  `README.md` and `BOARD.md` D26 document the billing contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1041,3 +1053,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D23 | 2026-11-12 | Quota enforcement is a durable per-action usage store (`quality-harness.quota/v1`) loaded from a monthly plan. A hard limit returns 429 before the requested quantity is recorded; earlier usage remains. Soft warnings are appended once per resource per period, and every decision carries remaining-quota headers. The `local` workspace and the no-plan OSS path are unlimited and write nothing. Cloud callers bind the store to `AuthContext.workspace_id`, never a request-body workspace. | Per-action enforcement preserves partial value and billing accuracy, while one atomic read-modify-write under a process and file lock prevents parallel workers from overspending. Keeping warnings in a separate quota event log avoids changing the frozen metering v1 contract because a warning is not a billable action. | Wire `QuotaStore` into the isolated cloud queue in `QH-025`; add plan/tier provisioning in `QH-023` and period-close corrections in `QH-022`. |
 | D24 | 2026-11-12 | Usage billing is an append-only hash-chained ledger (`quality-harness.ledger/v1`) under `.harness/ledger/entries.jsonl`, with immutable monthly close records in `periods.json`. Corrections are signed entries that reference the original entry or close id; a closed period rejects ordinary usage but accepts an explicit adjustment. Invoices derive from stored entry quantities and unit prices, and reconciliation checks the sum of quantity times unit price against the invoice total. Prices are supplied through a versioned price book; the OSS core does not embed commercial pricing. | Append-only records and hash continuity make tampering and accidental edits detectable, while explicit references preserve an auditable correction chain. Keeping close state separate from usage rows lets late events be rejected without losing earlier entries, and storing unit prices on entries keeps historical invoices reproducible even if a price book changes. | Wire ledger ingestion into `QH-024` cloud delivery, add billing-provider invoice IDs and tax handling there, and consider per-period entry compaction if run volume makes JSON Lines scanning too slow. |
 | D25 | 2026-11-12 | Self-serve signup is an idempotent onboarding store (`quality-harness.signup/v1`) that creates one workspace, one owner key, and a quota-backed free allowance, then issues an HMAC-SHA256 signed entitlement (`quality-harness.entitlement/v1`) encoding tier, limits, workspace, and effective period. Plan changes record an effective date and are rejected when they would downgrade below current usage. Entitlement verification is local and rejects tampering, workspace/period mismatch, and expiry. | Idempotency keys make retries safe without duplicate tenants or keys. Keeping the free allowance in the existing quota store makes usage visible immediately and reuses atomic monthly enforcement. HMAC signing uses only the standard library, stays offline-verifiable, and keeps commercial plan policy in caller-supplied plan JSON rather than the OSS core. | Add public-key signing and key rotation when an optional cryptography extra is approved; add email/identity proofing and billing-provider customer creation in `QH-024`. |
+| D26 | 2026-11-12 | Metered billing is an explicit, off-by-default `BillingFeatureFlag` (`enabled`, `sandbox`, allow-listed workspaces) plus a separate billing kill switch. A sandbox provider implements the provider boundary and reconciles ledger invoices to the cent. Billing calls use idempotency keys, retry transient failures, and report `degraded` without changing run or quota state. Secrets are resolved through `SecretManager` implementations (environment, in-memory, or file) and never persisted in billing state. | Keeping billing behind both a feature flag and a kill switch lets the OSS core and runs remain available during provider outages. Reusing ledger invoices as the billing source of truth preserves auditability, while idempotency keys make retries safe. Secret references keep credentials out of state and logs. | Replace the sandbox provider with a real provider adapter in a later task; add webhook handling, tax, and provider invoice IDs when sandbox credentials are available. |

@@ -424,6 +424,27 @@ new limits. `harness.signup.SignupStore` and `harness.entitlements` expose the
 same API; cloud adapters should resolve tenant identity first and bind quota
 through `QuotaStore.from_auth_context`.
 
+### Feature-gated metered billing
+
+Billing is disabled by default. Enable it only for allow-listed workspaces in
+sandbox mode with `QH_BILLING_ENABLED=true`, `QH_BILLING_SANDBOX=true`, and
+`QH_BILLING_WORKSPACES=ws_acme`, or with a billing flag JSON file. A billing
+kill switch at `.harness/billing/KILL` disables writes without stopping the
+harness.
+
+```bash
+python -m harness billing status --root .harness-cloud --workspace ws_acme
+python -m harness billing sync --root .harness-cloud --workspace ws_acme \
+  --period 2026-11 --invoice-id inv-1 --secret-store secrets.json
+python -m harness billing disable --root .harness-cloud --reason "operator stop"
+python -m harness billing enable --root .harness-cloud
+```
+
+`harness.billing.BillingStore` uses ledger invoices as the billing source of
+truth, creates sandbox customers/subscriptions, retries transient provider
+failures idempotently, and reports `degraded` without changing run or quota
+state. Secrets are resolved through `SecretManager` implementations.
+
 ### Live browser checks
 
 ```bash
