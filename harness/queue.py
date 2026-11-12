@@ -483,6 +483,23 @@ class JobQueue:
             return self._public(job)
 
     # --------------------------------------------------------------- metrics
+    def delete_workspace_jobs(self, workspace_id: str) -> int:
+        workspace_key = _safe_workspace(workspace_id)
+        removed = 0
+        with _locked(self.lock_path):
+            data = self._load()
+            jobs = data.get("jobs", {})
+            to_delete = [
+                job_id
+                for job_id, job in jobs.items()
+                if isinstance(job, dict) and job.get("workspace_id") == workspace_key
+            ]
+            for job_id in to_delete:
+                del jobs[job_id]
+                removed += 1
+            self._save(data)
+        return removed
+
     def metrics(self) -> Dict[str, Any]:
         with _locked(self.lock_path):
             data = self._load()

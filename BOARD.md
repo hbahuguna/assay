@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-026 - Add tenant retention, export, and deletion controls
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-025
-- **Status:** Ready
-- **Description:** Give each workspace a retention policy and a tested path to
-  export or delete all of its state and evidence without touching another
-  tenant.
-- **Acceptance Criteria:**
-  - Default retention is explicit and documented per plan.
-  - Export produces a signed archive with a manifest and no cross-tenant paths.
-  - Deletion removes state, evidence, queue records, and cached exports.
-  - Deletion is soft for a grace period and auditable after hard deletion.
-  - Tests verify deletion of a tenant with active and historical runs.
-
 ### QH-027 - Add billing sandbox and entitlement regression tests
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -332,8 +315,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-025` are complete, so `QH-026` is now
-the lowest-numbered unblocked task. `QH-026` continues the
+No task is claimed. `QH-001` through `QH-026` are complete, so `QH-027` is now
+the lowest-numbered unblocked task. `QH-027` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1013,6 +996,32 @@ commercial-critical-path chain.
   evidence preservation. Full suite: 207 passing tests with Python 3.11.
   `README.md` and `BOARD.md` D27 document the queue contract.
 
+### QH-026 - Add tenant retention, export, and deletion controls
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-025
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/retention.py` with explicit per-workspace
+  retention policy, signed ZIP export with a hashed manifest, soft deletion with
+  a grace period, and auditable hard deletion. Hard deletion removes tenant
+  roots, queue records, cached exports, billing and quota state, and signup
+  records while preserving an audit log.
+- **Acceptance Criteria:**
+  - Default retention is explicit and documented per plan.
+  - Export produces a signed archive with a manifest and no cross-tenant paths.
+  - Deletion removes state, evidence, queue records, and cached exports.
+  - Deletion is soft for a grace period and auditable after hard deletion.
+  - Tests verify deletion of a tenant with active and historical runs.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_retention -v`
+- **Evidence:** `tests/test_retention.py` covers default/custom retention,
+  signed export and tamper rejection, cross-tenant isolation, soft/hard delete
+  grace enforcement, removal of state/queue/exports, and deletion of tenants
+  with processed runs. Full suite: 215 passing tests with Python 3.11.
+  `README.md` and `BOARD.md` D28 document the retention contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1064,3 +1073,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D25 | 2026-11-12 | Self-serve signup is an idempotent onboarding store (`quality-harness.signup/v1`) that creates one workspace, one owner key, and a quota-backed free allowance, then issues an HMAC-SHA256 signed entitlement (`quality-harness.entitlement/v1`) encoding tier, limits, workspace, and effective period. Plan changes record an effective date and are rejected when they would downgrade below current usage. Entitlement verification is local and rejects tampering, workspace/period mismatch, and expiry. | Idempotency keys make retries safe without duplicate tenants or keys. Keeping the free allowance in the existing quota store makes usage visible immediately and reuses atomic monthly enforcement. HMAC signing uses only the standard library, stays offline-verifiable, and keeps commercial plan policy in caller-supplied plan JSON rather than the OSS core. | Add public-key signing and key rotation when an optional cryptography extra is approved; add email/identity proofing and billing-provider customer creation in `QH-024`. |
 | D26 | 2026-11-12 | Metered billing is an explicit, off-by-default `BillingFeatureFlag` (`enabled`, `sandbox`, allow-listed workspaces) plus a separate billing kill switch. A sandbox provider implements the provider boundary and reconciles ledger invoices to the cent. Billing calls use idempotency keys, retry transient failures, and report `degraded` without changing run or quota state. Secrets are resolved through `SecretManager` implementations (environment, in-memory, or file) and never persisted in billing state. | Keeping billing behind both a feature flag and a kill switch lets the OSS core and runs remain available during provider outages. Reusing ledger invoices as the billing source of truth preserves auditability, while idempotency keys make retries safe. Secret references keep credentials out of state and logs. | Replace the sandbox provider with a real provider adapter in a later task; add webhook handling, tax, and provider invoice IDs when sandbox credentials are available. |
 | D27 | 2026-11-12 | Cloud runs are queued in `.harness/cloud/queue.json` and execute in per-tenant roots under `.harness/tenants/<workspace>/`. Job records expose only owner-scoped fields; cross-tenant lookups return no data. Cancellation writes the tenant `.harness/KILL` file so the existing orchestrator kill switch stops remaining checks and preserves partial evidence. Crashed running jobs are recovered to queued and retried; retry uses persisted state and metering idempotency keys to avoid double billing. Queue metrics expose depth, status counts, and run durations. | Reusing the deterministic orchestrator keeps phase order, evidence, scoring, and kill behavior unchanged. Separate tenant roots provide filesystem isolation, while owner checks in the queue API prevent job metadata leakage. Idempotent metering keys make retries safe. | Add true process-level workers, sandboxed filesystem namespaces, and cancellation tokens if stronger isolation is required; add queue-depth alerting and retention in `QH-026`. |
+| D28 | 2026-11-12 | Tenant retention is an explicit per-workspace policy (default 30 days) with soft deletion for a grace period and auditable hard deletion. Exports are ZIP archives containing tenant state/evidence and filtered central records, plus a signed manifest of SHA-256 hashes. Hard deletion removes tenant roots, queue jobs, cached exports, billing/quota state, and signup records, while appending an audit record. | Explicit retention and grace periods prevent accidental data loss. Signed manifests make export tampering detectable and keep exports scoped to one tenant. Leaving an audit trail after hard deletion preserves accountability without retaining tenant data. | Add scheduled retention enforcement, encrypted archives, and GDPR-style deletion certificates when the cloud control plane lands. |

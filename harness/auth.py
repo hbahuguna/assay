@@ -362,6 +362,26 @@ class AuthStore:
     def get_workspace(self, workspace_id: str) -> Dict[str, Any]:
         return self._public_workspace(self._workspace(self._load(), workspace_id))
 
+    def delete_workspace(self, workspace_id: str) -> bool:
+        data = self._load()
+        identifier = str(workspace_id or "").strip()
+        if identifier not in data.get("workspaces", {}):
+            return False
+        del data["workspaces"][identifier]
+        data["keys"] = {
+            prefix: record
+            for prefix, record in data.get("keys", {}).items()
+            if str(record.get("workspace_id", "")) != identifier
+        }
+        data["runs"] = {
+            run_id: owner
+            for run_id, owner in data.get("runs", {}).items()
+            if str(owner) != identifier
+        }
+        self._save(data)
+        self._audit("workspace_deleted", workspace_id=identifier)
+        return True
+
     def list_workspaces(self) -> List[Dict[str, Any]]:
         data = self._load()
         return [

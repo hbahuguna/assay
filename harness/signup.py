@@ -391,6 +391,21 @@ class SignupStore:
 
     get_workspace = get_signup
 
+    def delete_workspace(self, workspace_id: str) -> Optional[Dict[str, Any]]:
+        workspace_key = _safe_text(workspace_id)
+        with _locked(self.lock_path):
+            data = self._load()
+            record = data["workspaces"].pop(workspace_key, None)
+            # Remove any signup requests bound to this workspace.
+            requests = data.get("requests", {})
+            for request_id in [
+                key for key, value in requests.items()
+                if isinstance(value, dict) and value.get("workspace_id") == workspace_key
+            ]:
+                del requests[request_id]
+            self._save(data)
+        return copy.deepcopy(record) if isinstance(record, dict) else None
+
     def select_plan(
         self,
         workspace_id: str,

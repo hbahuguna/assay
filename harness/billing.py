@@ -853,6 +853,17 @@ class BillingStore:
             "message": "Billing is disabled by feature flag or kill switch.",
         }
 
+    def delete_workspace(self, workspace_id: str) -> bool:
+        workspace_key = _safe_text(workspace_id)
+        with _locked(self.lock_path):
+            data = self._load()
+            workspaces = data.get("workspaces", {})
+            if workspace_key in workspaces:
+                del workspaces[workspace_key]
+                self._save(data)
+                return True
+        return False
+
     def _degraded_result(
         self,
         workspace_id: str,

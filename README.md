@@ -472,6 +472,29 @@ with `recover()` and retried without double-billing the same check because
 metering events are idempotent by run id. `harness.queue.JobQueue` exposes
 queue depth and run-duration metrics.
 
+### Tenant retention, export, and deletion
+
+Each workspace has an explicit retention policy (default 30 days). Exports are
+signed ZIP archives with a SHA-256 manifest, and deletion is soft for a grace
+period before hard deletion.
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from harness.retention import RetentionStore
+
+store = RetentionStore(Path(".harness-cloud"))
+print(store.policy("ws_acme"))
+print(store.export("ws_acme"))
+print(store.soft_delete("ws_acme", grace_days=7))
+print(store.hard_delete("ws_acme", force=True))
+PY
+```
+
+Hard deletion removes tenant roots, queue records, cached exports, billing and
+quota state, and signup records while preserving an audit log. Archives are
+verified with `verify_export`.
+
 ### Live browser checks
 
 ```bash
