@@ -21,7 +21,7 @@ async function runAssay(args: string[], cwd: string): Promise<string> {
 }
 
 const assayCommands = [
-  { name: "assay-jay", label: "jay" },
+  { name: "assay-manager", label: "manager" },
   { name: "assay-full", label: "full" },
   { name: "assay-test", label: "test" },
   { name: "assay-functionality", label: "functionality" },
