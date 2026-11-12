@@ -6,10 +6,11 @@ const execFileAsync = promisify(execFile)
 
 const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
 
-async function runAssay(args: string[]): Promise<string> {
+async function runAssay(args: string[], cwd: string): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(PYTHON, ["-P", "-m", "harness", ...args], {
       encoding: "utf-8",
+      cwd,
       env: { ...process.env, PYTHONPATH: "/Users/skaparwan/github/assay" },
     })
     return stdout || stderr || "(no output)"
@@ -43,7 +44,7 @@ export default Plugin.define({
             // Treat a plain-language request as a risk-based run with that intent.
             args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas", "--intent", text]
           }
-          const output = await runAssay(args)
+          const output = await runAssay(args, ctx.location.directory)
           await ctx.session.prompt({
             sessionID,
             text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nReport this output only. Do not run any additional commands or tools.`,
