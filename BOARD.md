@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-035 - Guard resume against a changed plugin registry
-
-- **Epic:** E1 Deterministic Core Engine
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-003
-- **Status:** Ready
-- **Description:** Persist a plugin-registry fingerprint (check ids, sources,
-  signatures/evaluator availability, and trust key ids) with the run and reject
-  resume when the registry has changed, so a pending check cannot be replayed
-  against a different evaluator or a plugin that is no longer trusted.
-- **Acceptance Criteria:**
-  - Resume with an added, removed, re-signed, or re-evaluated plugin fails with a
-    typed `StateError` before replay.
-  - Completed checks and their evidence remain byte-identical after the failed
-    resume attempt.
-  - The progress and report record the registry fingerprint used by the run.
-  - Tests cover a plugin added between runs, a plugin removed between runs, and a
-    plugin whose trust key was rotated.
-
 ### QH-036 - Continue seeded id sequences across resume
 
 - **Epic:** E1 Deterministic Core Engine
@@ -181,8 +161,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-034` are complete, so `QH-035` is now
-the lowest-numbered unblocked task. `QH-035` continues the
+No task is claimed. `QH-001` through `QH-035` are complete, so `QH-036` is now
+the lowest-numbered unblocked task. `QH-036` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1082,6 +1062,31 @@ commercial-critical-path chain.
 - **Evidence:** `tests/test_failure_injection.py`. Full suite: 261 passing tests
   with Python 3.11. `BOARD.md` D36 documents the failure-injection contract.
 
+### QH-035 - Guard resume against a changed plugin registry
+
+- **Epic:** E1 Deterministic Core Engine
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-003
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added a stable registry fingerprint to `CheckRegistry` and
+  persisted it in run options. Resume now compares the saved fingerprint with
+  the current registry before loading personas or replaying checks, raising a
+  typed `StateError` when plugins or trust keys changed. Failed resume attempts
+  do not mutate progress, report, or evidence.
+- **Acceptance Criteria:**
+  - Resume with an added, removed, re-signed, or re-evaluated plugin fails with a
+    typed `StateError` before replay.
+  - Completed checks and their evidence remain byte-identical after the failed
+    resume attempt.
+  - The progress and report record the registry fingerprint used by the run.
+  - Tests cover a plugin added between runs, a plugin removed between runs, and a
+    plugin whose trust key was rotated.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_resume_registry -v`
+- **Evidence:** `tests/test_resume_registry.py`. Full suite: 265 passing tests
+  with Python 3.11. `BOARD.md` D37 records the resume-guard decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1142,3 +1147,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D34 | 2026-11-12 | Evidence manifests are HMAC-SHA256 signed with a local evidence signing key. `EvidenceStore.verify()` checks the manifest signature, re-hashes every artifact, reports missing or substituted files with their path and check id, and returns a machine-readable alert. The `verify-evidence` CLI works offline and caps confidence at 0 with a `hold` decision when tampering is detected. | A signed manifest detects both artifact edits and manifest edits without a network dependency. Including check ids makes failures actionable for operators. Treating any verification failure as a hard hold prevents tampered evidence from supporting a release. | Move to public-key signatures when an optional cryptography extra is approved; add key rotation and per-run key identifiers. |
 | D35 | 2026-11-12 | URL targets are validated before navigation by resolving DNS and rejecting loopback, private, link-local, metadata, multicast, and reserved addresses unless an explicit CIDR or hostname allowlist permits them. Allowlists load from `.harness/ssrf-allowlist.json`, a config path, or `QH_SSRF_ALLOWLIST`; they are not a blanket bypass flag. Redirect chains and browser navigation are re-validated, and DNS rebinding is covered by tests. Target errors do not include resolved internal IPs. | SSRF protection must fail closed by default while still allowing local CI servers through documented configuration. Re-validating redirects closes a common bypass. Keeping internal addresses out of errors prevents information disclosure in reports and logs. | Add DNS pinning/proxy controls and IPv6 coverage expansion when browser execution moves to isolated workers. |
 | D36 | 2026-11-12 | Failure injection is covered by deterministic tests: corrupt `progress.json` raises a typed `StateError` without overwriting the last good file; a failed evidence write yields zero-confidence, non-shipping report; kill during evidence collection records a halted hold report; and a truncated manifest fails evidence verification. Recovery is documented as restoring the last good progress file or rerunning after fixing the underlying failure. | Failing closed prevents a partial or corrupted run from claiming confidence. Keeping the corrupt file in place preserves forensic evidence, while hold reports make kill behavior auditable. | Add disk-full and permission-denied injection once a cross-platform fault-injection helper is available. |
+| D37 | 2026-11-12 | Resume persists a SHA-256 registry fingerprint containing check ids, sources, blocked reasons, evaluator availability, and trust-key ids. A mismatch raises `StateError` before personas are loaded or any check is replayed, and failed resume attempts leave progress, report, and evidence byte-identical. | A changed evaluator or untrusted plugin must not be silently used for pending work. Comparing before persona validation prevents partial planning against a different registry. Keeping the failed attempt read-only preserves forensic evidence. | Add cryptographic signing of the registry fingerprint if plugin trust moves beyond HMAC. |

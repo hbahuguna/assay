@@ -201,11 +201,27 @@ class Orchestrator:
 
     def _run(self, resume: bool = False) -> RunState:
         self._load_registry()
+        resume_state = None
+        if resume:
+            resume_state = self.state_store.load()
+            if self.registry is not None:
+                saved_fingerprint = str(
+                    resume_state.options.get("registry_fingerprint")
+                    or resume_state.options.get("plugin_registry_fingerprint")
+                    or ""
+                )
+                if saved_fingerprint and saved_fingerprint != self.registry.fingerprint():
+                    raise StateError(
+                        "Plugin registry changed since this run started "
+                        "(saved {}, current {}). Start a new run instead of resuming.".format(
+                            saved_fingerprint, self.registry.fingerprint()
+                        )
+                    )
         self._load_personas()
         self._load_policy()
         target = self._resolve_target(self.options.target, self.options.source)
         if resume:
-            state = self.state_store.load()
+            state = resume_state if resume_state is not None else self.state_store.load()
             self.workflow = self._resolve_workflow(state.workflow_id)
             if state.workflow_version and state.workflow_version != self.workflow.version:
                 raise StateError(
@@ -465,6 +481,9 @@ class Orchestrator:
             seed=self.options.seed,
             clock_mode=self.options.clock_mode,
         )
+        if self.registry is not None:
+            state.options["registry_fingerprint"] = self.registry.fingerprint()
+            state.options["plugin_registry_fingerprint"] = self.registry.fingerprint()
         state.personas = [self._public_persona(persona) for persona in self.personas]
         state.evidence_dir = str(Path(".harness") / "evidence" / run_id)
         return state

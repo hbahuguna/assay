@@ -515,6 +515,35 @@ class CheckRegistry:
         self._owner_hints[check_id] = persona_id
         self.log_fn("WARNING: plugin check '{}' blocked: {}".format(check_id, reason))
 
+    def fingerprint(self) -> str:
+        """Return a stable fingerprint of the loaded registry.
+
+        The fingerprint includes check ids, sources, blocked reasons, and the
+        trust-key ids available to verify plugins.  It intentionally excludes
+        mutable counters and log messages.
+        """
+
+        trust_key_ids = sorted(self.trust_keys)
+        items = []
+        for check_id in sorted(self._definitions):
+            items.append(
+                {
+                    "id": check_id,
+                    "source": self._sources.get(check_id, ""),
+                    "blocked": self._blocked.get(check_id, ""),
+                    "evaluator": check_id in self._evaluators,
+                    "key_id": self._owner_hints.get(check_id, ""),
+                }
+            )
+        payload = {
+            "schema_version": "quality-harness.registry-fingerprint/v1",
+            "trust_keys": trust_key_ids,
+            "checks": items,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+
     def validate_ownership(self, personas: Iterable[Persona]) -> None:
         """Resolve every check to exactly one persona owner.
 
