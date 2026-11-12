@@ -18,6 +18,7 @@ tools:
   - browser_dom_snapshot
   - browser_screenshot
 checks:
+  - static.full_assessment
   - static.inventory
   - static.tests
   - static.ci

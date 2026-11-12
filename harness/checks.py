@@ -27,6 +27,16 @@ class CheckDefinition:
 
 CHECK_CATALOG: List[CheckDefinition] = [
     CheckDefinition(
+        id="static.full_assessment",
+        title="Full category assessment scope is recorded",
+        domain="functional",
+        kind="static",
+        intent="Confirm that a comprehensive full-category assessment was requested and represented.",
+        expected="The run intent explicitly requests the full category and the planned scope is recorded as evidence.",
+        base_weight=0.5,
+        requires="any",
+    ),
+    CheckDefinition(
         id="static.inventory",
         title="Source and test inventory is complete and readable",
         domain="functional",
@@ -195,7 +205,20 @@ def catalog_ids(registry: Optional[Any] = None) -> List[str]:
     return [definition.id for definition in CHECK_CATALOG]
 
 
-def _applicable(definition: CheckDefinition, inventory: Dict[str, Any], target: Target, no_browser: bool) -> bool:
+def _is_full_category_intent(intent: str) -> bool:
+    text = (intent or "").lower()
+    return "full assessment" in text or "full category" in text or text.strip() == "full"
+
+
+def _applicable(
+    definition: CheckDefinition,
+    inventory: Dict[str, Any],
+    target: Target,
+    no_browser: bool,
+    intent: str = "",
+) -> bool:
+    if definition.id == "static.full_assessment":
+        return _is_full_category_intent(intent)
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))
@@ -219,6 +242,7 @@ def plan_checks(
     registry: Optional[Any] = None,
     all_personas: Optional[Iterable[Persona]] = None,
     mobile: bool = False,
+    intent: str = "",
 ) -> List[Check]:
     """Build the planned checks for the selected personas.
 
@@ -269,7 +293,7 @@ def plan_checks(
             owner = placeholder_owner(owners, definition.id)
         if owner not in selected:
             continue
-        if not _applicable(definition, inventory, target, no_browser):
+        if not _applicable(definition, inventory, target, no_browser, intent=intent):
             continue
         if not mobile and definition.id in {"browser.overflow", "browser.focus_order"}:
             continue

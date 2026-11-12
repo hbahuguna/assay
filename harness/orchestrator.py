@@ -692,6 +692,7 @@ class Orchestrator:
             registry=self.registry,
             all_personas=self.all_personas,
             mobile=self.options.mobile,
+            intent=self.state.intent,
         )
         apply_risk_weights(checks, self.state.risks)
         self.state.checks = checks

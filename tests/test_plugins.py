@@ -96,6 +96,7 @@ class RegistryTests(unittest.TestCase):
             {check.id for check in planned},
             set(registry.ids())
             - {
+                "static.full_assessment",
                 "browser.load",
                 "browser.console",
                 "browser.network",
