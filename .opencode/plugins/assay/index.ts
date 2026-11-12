@@ -24,7 +24,10 @@ export default Plugin.define({
         name: "assay",
         description: "Run quality-harness: /assay <command> [args...]",
         execute: async ({ sessionID, prompt }) => {
-          const args = (prompt.text || "").trim().split(/\s+/).filter(Boolean)
+          let args = (prompt.text || "").trim().split(/\s+/).filter(Boolean)
+          if (args.length === 0) {
+            args = ["run", "--target", ".", "--no-browser", "--personas-dir", "/Users/skaparwan/github/assay/personas"]
+          }
           const output = runAssay(args)
           await ctx.session.synthetic({ sessionID, text: output })
         },
