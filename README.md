@@ -297,6 +297,62 @@ python -m harness auth claim-run --workspace ws_acme --run run-123
 python -m harness auth authorize-run --token env:QH_API_KEY --run run-123
 ```
 
+### Monthly quota enforcement
+
+Cloud callers opt in to monthly allowances with a versioned quota plan
+(`quality-harness.quota-plan/v1`). The plan is a JSON object with a soft and hard
+allowance for each billable resource. A numeric value is shorthand for a hard
+limit.
+
+```json
+{
+  "id": "free",
+  "version": "2026-11",
+  "period": "monthly",
+  "limits": {
+    "runs": {"soft": 10, "hard": 20},
+    "checks": {"soft": 100, "hard": 150},
+    "browser_minutes": {"soft": 30, "hard": 60},
+    "evidence_bytes": {"soft": 5000000, "hard": 10000000}
+  }
+}
+```
+
+The OSS core stays unlimited: without a plan, or when the synthetic `local`
+workspace is explicitly selected without enforcement, quota calls return an
+allowed decision and do not create quota state. Supplying a plan opts in to
+enforcement. The enforcement is per action, not per run submission, so a run can
+keep the work it already completed.
+
+```bash
+# Show usage, remaining allowance, and the monthly reset time.
+python -m harness quota show --root .harness-cloud \
+  --workspace ws_acme --plan quota-free.json
+
+# Consume one action. Exit 1 means the action was blocked by a hard limit.
+python -m harness quota consume --root .harness-cloud \
+  --workspace ws_acme --plan quota-free.json \
+  --resource checks --quantity 1
+```
+
+A soft-limit warning is emitted once per resource per billing period per
+workspace and appended to `.harness/quota/events.jsonl`. Once usage crosses the
+hard limit, the next action returns HTTP 429 (also exposed as `http_status` in
+the CLI payload) with the exact `limit`, `used`, `requested`, and `reset_at`.
+Usage from earlier actions remains in `.harness/quota/usage.json` and is visible
+in `quota show`; the blocked action does not increment usage.
+
+Every successful decision carries response headers, including
+`X-QH-Quota-Remaining-Checks`, `X-QH-Quota-Limit-Checks`,
+`X-QH-Quota-Reset`, and the generic `X-Quota-Remaining` aliases. Hard-limit
+responses also include `Retry-After`. Consumption is guarded by a process-local
+lock plus an advisory file lock, so parallel requests cannot overspend a limit.
+`harness.quota.QuotaStore` is the enforcement primitive the cloud execution
+queue will use in `QH-025`; metering event names map directly to quota resources
+through `consume_metering_event`. Cloud adapters should authenticate first and
+build the store with `QuotaStore.from_auth_context(root, context, plan)` so the
+tenant id comes from the scoped `AuthContext`, never from the request body.
+
 ### Live browser checks
 
 ```bash
@@ -515,6 +571,7 @@ python -m pytest
 - Automated accessibility checks do not establish WCAG conformance.
 - Security checks are bounded and non-destructive; they are not a penetration
   test or a certification.
-- The OSS harness has no multi-tenancy, quota, or billing. It emits canonical
-  usage events to a local sink; workspace authentication, quota, and billing
-  remain cloud-epic work on `BOARD.md`.
+- The OSS harness remains account-free and unlimited. Workspace authentication,
+  quota enforcement, and canonical usage events are dependency-free local
+  modules; a hosted multi-tenant service, billing provider, and dashboard remain
+  cloud-epic work on `BOARD.md`.

@@ -334,6 +334,40 @@ def build_parser() -> argparse.ArgumentParser:
     auth_authorize.add_argument("--scope", default="read")
     auth_authorize.add_argument("--root", default=".")
 
+    quota = subparsers.add_parser(
+        "quota",
+        help="Inspect or consume monthly workspace quota as JSON.",
+    )
+    quota_subparsers = quota.add_subparsers(dest="quota_action", required=True)
+
+    quota_show = quota_subparsers.add_parser(
+        "show", help="Show current-period usage, limits, and reset time."
+    )
+    quota_show.add_argument("--workspace", default="local")
+    quota_show.add_argument("--plan", default=None, help="Path to a quota-plan JSON file.")
+    quota_show.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Enforce the plan even for the synthetic local workspace.",
+    )
+    quota_show.add_argument("--now", default=None, help="Evaluate at an ISO-8601 time.")
+    quota_show.add_argument("--root", default=".")
+
+    quota_consume = quota_subparsers.add_parser(
+        "consume", help="Consume one action against a workspace's quota."
+    )
+    quota_consume.add_argument("--workspace", default="local")
+    quota_consume.add_argument("--resource", required=True, help="run, check, browser_minute, or evidence_byte.")
+    quota_consume.add_argument("--quantity", type=float, default=1)
+    quota_consume.add_argument("--plan", default=None, help="Path to a quota-plan JSON file.")
+    quota_consume.add_argument(
+        "--enforce",
+        action="store_true",
+        help="Enforce the plan even for the synthetic local workspace.",
+    )
+    quota_consume.add_argument("--now", default=None, help="Evaluate at an ISO-8601 time.")
+    quota_consume.add_argument("--root", default=".")
+
     calibrate = subparsers.add_parser(
         "calibrate",
         help="Run labeled confidence calibration fixtures and write a report.",
@@ -979,6 +1013,49 @@ def _auth(args: argparse.Namespace) -> int:
         return 1
 
 
+def _quota(args: argparse.Namespace) -> int:
+    from .quota import SCHEMA_VERSION, QuotaError, QuotaExceeded, QuotaStore
+
+    action = getattr(args, "quota_action", None)
+    try:
+        store = QuotaStore(
+            Path(args.root).expanduser().resolve(),
+            plan=args.plan,
+            workspace=args.workspace,
+            enforce=True if args.enforce else None,
+        )
+        if action == "show":
+            payload = store.snapshot(now=args.now)
+            payload["command"] = "quota"
+            _print_json(payload)
+            return 0
+        if action == "consume":
+            try:
+                decision = store.consume(
+                    args.resource, args.quantity, now=args.now
+                )
+            except QuotaExceeded as exc:
+                payload = exc.to_dict()
+                payload["command"] = "quota"
+                _print_json(payload)
+                return 1
+            payload = decision.to_dict()
+            payload["command"] = "quota"
+            _print_json(payload)
+            return 0
+        raise HarnessError("Unknown quota action: {}".format(action))
+    except (QuotaError, ValueError) as exc:
+        _print_json(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "status": "error",
+                "command": "quota",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            }
+        )
+        return 2
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1012,6 +1089,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _suppress(args)
         if args.command == "auth":
             return _auth(args)
+        if args.command == "quota":
+            return _quota(args)
         parser.error("Unknown command: {}".format(args.command))
     except KeyboardInterrupt:
         try:

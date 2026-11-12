@@ -41,3 +41,7 @@ class PolicyError(HarnessError):
 
 class MeteringError(HarnessError):
     pass
+
+
+class QuotaError(HarnessError):
+    pass

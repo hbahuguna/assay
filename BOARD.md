@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-021 - Enforce quotas with soft and hard limits
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P0
-- **Points:** 5
-- **Depends on:** QH-019, QH-020
-- **Status:** Ready
-- **Description:** Enforce monthly allowances for runs, checks, browser minutes,
-  and evidence bytes. Return remaining quota in response headers and block only
-  the action that exceeds a hard limit.
-- **Acceptance Criteria:**
-  - Soft-limit warnings are emitted once per billing period per workspace.
-  - A hard-limit action returns 402/429 with the exact limit and reset time.
-  - Partial work already completed is billed and reported, not discarded.
-  - Concurrency tests cannot overspend a limit through parallel requests.
-  - OSS/local mode remains unlimited and unchanged.
-
 ### QH-022 - Build the append-only usage ledger and invoice export
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -957,6 +940,35 @@ commercial-critical-path chain.
   with Python 3.11. `README.md` documents the auth CLI and store; `BOARD.md` D22
   records the security decision.
 
+### QH-021 - Enforce quotas with soft and hard limits
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P0
+- **Points:** 5
+- **Depends on:** QH-019, QH-020
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/quota.py` and a `quota` CLI for monthly
+  per-workspace allowances on runs, checks, browser minutes, and evidence bytes.
+  Soft-limit warnings are emitted once per resource per billing period; a hard
+  limit blocks only the action that exceeds it with a 429 response and exact
+  limit/reset time. Completed usage remains durable and reportable.
+- **Acceptance Criteria:**
+  - Soft-limit warnings are emitted once per billing period per workspace.
+  - A hard-limit action returns 402/429 with the exact limit and reset time.
+  - Partial work already completed is billed and reported, not discarded.
+  - Concurrency tests cannot overspend a limit through parallel requests.
+  - OSS/local mode remains unlimited and unchanged.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_quota -v`
+- **Evidence:** `tests/test_quota.py` covers plan parsing, once-per-period soft
+  warnings and rollover, workspace isolation, 429 payloads with exact
+  limit/reset headers, durable partial usage, metering-event mapping,
+  AuthContext tenant binding, explicit local enforcement for tests, twenty
+  parallel consumers that cannot exceed a four-check hard limit, and CLI
+  success/block/invalid-plan paths. Full suite: 167 passing tests with
+  Python 3.11. `README.md` documents the plan JSON and headers; `BOARD.md` D23
+  records the enforcement decision.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1003,3 +1015,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D20 | 2026-11-11 | QH-014 publishes 14 labeled calibration fixtures and a `calibrate` CLI command; the current `weighted-coverage-v1` weights, penalties, and caps are retained without changes. | The fixtures make score behavior auditable and document two intentional disagreements (blocked coverage and static-only scope), but no fixture evidence currently justifies changing the published formula. | Revisit weights only if a labeled historical-outcome corpus shows systematic disagreement. |
 | D21 | 2026-11-12 | Usage metering is a versioned JSON Lines contract (`quality-harness.metering/v1`) with a frozen event name set and an idempotency key on every event. OSS runs write the same events to `.harness/metering/events.jsonl`; workspace defaults to `local` and source to `oss`. | A local file sink proves the billing contract without a cloud account, while idempotency lets a future delivery layer retry safely. Keeping metering separate from operational `events.jsonl` prevents audit logs from becoming billing records. | Add a cloud sink adapter in `QH-024`; any new billable action needs a new schema version or a frozen v1 addendum, never a silent rename. |
 | D22 | 2026-11-12 | Cloud identity resolves through `harness.auth`: every request authenticates to exactly one workspace, API keys are stored as salted SHA-256 hashes with a public prefix, and run ids are claimed by one workspace. Wrong-scope requests return 403; missing, expired, revoked, and guessed/foreign run ids return 401/404 without workspace data. | Returning the same 404 for a guessed run id and another tenant's real id prevents tenant enumeration. A one-time secret plus a hashed store keeps plaintext keys out of state, logs, and the audit trail. Resolving workspace before quota in `QH-021` makes limits impossible to apply to the wrong tenant. | Add a KMS-backed keyed-hash pepper, rotation grace windows, and per-key rate limiting when the cloud execution layer lands in `QH-025`. |
+| D23 | 2026-11-12 | Quota enforcement is a durable per-action usage store (`quality-harness.quota/v1`) loaded from a monthly plan. A hard limit returns 429 before the requested quantity is recorded; earlier usage remains. Soft warnings are appended once per resource per period, and every decision carries remaining-quota headers. The `local` workspace and the no-plan OSS path are unlimited and write nothing. Cloud callers bind the store to `AuthContext.workspace_id`, never a request-body workspace. | Per-action enforcement preserves partial value and billing accuracy, while one atomic read-modify-write under a process and file lock prevents parallel workers from overspending. Keeping warnings in a separate quota event log avoids changing the frozen metering v1 contract because a warning is not a billable action. | Wire `QuotaStore` into the isolated cloud queue in `QH-025`; add plan/tier provisioning in `QH-023` and period-close corrections in `QH-022`. |
