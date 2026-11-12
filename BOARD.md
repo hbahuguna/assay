@@ -138,6 +138,1206 @@ into a false release signal.
 
 ## Ready
 
+### QH-037 - Add harness support for the /carbon test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-038 - Add harness support for the /jay (alias for /jay) test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/jay (alias for /jay)`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-039 - Add harness support for the /full test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/full`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-040 - Add harness support for the /carbon-test test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-test`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-041 - Add harness support for the /carbon-functionality test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-functionality`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-042 - Add harness support for the /carbon-browser test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-browser`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-043 - Add harness support for the /carbon-issues test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-issues`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-044 - Add harness support for the /carbon-demo test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-demo`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-045 - Add harness support for the /carbon-more test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-more`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-046 - Add harness support for the /carbon-help test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-help`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-047 - Add harness support for the /carbon-accessibility test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-accessibility`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-048 - Add harness support for the /carbon-ui test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-ui`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-049 - Add harness support for the /carbon-ux test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-ux`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-050 - Add harness support for the /carbon-usability test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-usability`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-051 - Add harness support for the /carbon-personas test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-personas`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-052 - Add harness support for the /carbon-compatibility test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-compatibility`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-053 - Add harness support for the /carbon-intl test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-intl`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-054 - Add harness support for the /carbon-localization test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-localization`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-055 - Add harness support for the /carbon-content test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-content`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-056 - Add harness support for the /carbon-geo test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-geo`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-057 - Add harness support for the /carbon-security test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-security`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-058 - Add harness support for the /carbon-security-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-security-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-059 - Add harness support for the /carbon-privacy test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-privacy`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-060 - Add harness support for the /carbon-state test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-state`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-061 - Add harness support for the /carbon-reliability test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-reliability`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-062 - Add harness support for the /carbon-performance test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-performance`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-063 - Add harness support for the /carbon-load test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-load`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-064 - Add harness support for the /carbon-stress test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-stress`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-065 - Add harness support for the /carbon-networking test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-networking`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-066 - Add harness support for the /carbon-api test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-api`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-067 - Add harness support for the /carbon-data test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-data`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-068 - Add harness support for the /failure test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/failure`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-069 - Add harness support for the /proof test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/proof`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-070 - Add harness support for the /carbon-confidence test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-confidence`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-071 - Add harness support for the /carbon-confidence-init test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-confidence-init`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-072 - Add harness support for the /carbon-confidence-plan test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-confidence-plan`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-073 - Add harness support for the /carbon-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-074 - Add harness support for the /carbon-skeptical-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-skeptical-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-075 - Add harness support for the /carbon-release test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-release`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-076 - Add harness support for the /carbon-release-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-release-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-077 - Add harness support for the /carbon-incident test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-incident`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-078 - Add harness support for the /carbon-eval test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-eval`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-079 - Add harness support for the /carbon-eval-design-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-eval-design-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-080 - Add harness support for the /carbon-statistical-review test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-statistical-review`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-081 - Add harness support for the /carbon-agentic test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-agentic`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-082 - Add harness support for the /chatbot test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/chatbot`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-083 - Add harness support for the /bias test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/bias`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-084 - Add harness support for the /carbon-tests test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-tests`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-085 - Add harness support for the /carbon-generate test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-generate`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-086 - Add harness support for the /carbon-map test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-map`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-087 - Add harness support for the /carbon-full-report test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-full-report`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-088 - Add harness support for the /carbon-stats test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-stats`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-089 - Add harness support for the /carbon-integrations test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-integrations`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-090 - Add harness support for the /ai-upgrade test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/ai-upgrade`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-091 - Add harness support for the /carbon-auto test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-auto`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-092 - Add harness support for the /carbon-background test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-background`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-093 - Add harness support for the /carbon-forever test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-forever`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-094 - Add harness support for the /carbon-settings test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-settings`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-095 - Add harness support for the /carbon-human test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-human`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-096 - Add harness support for the /carbon-pro test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Ready
+- **Description:** Implement deterministic harness coverage for the `/carbon-pro`
+  category, including any required check, persona ownership, evidence capture,
+  scoring impact, redaction, and report representation. Work this card
+  independently and add a focused regression test before moving on.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+
 ## In Progress
 
 No task is claimed. `QH-001` through `QH-036` are complete.
