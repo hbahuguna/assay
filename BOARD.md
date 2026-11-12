@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-025 - Add the cloud run queue with per-tenant worker isolation
-
-- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
-- **Priority:** P0
-- **Points:** 8
-- **Depends on:** QH-020, QH-021
-- **Status:** Ready
-- **Description:** Queue cloud runs with a durable job record, enforce one active
-  browser context per tenant worker, and isolate filesystem, evidence, and
-  network access between tenants.
-- **Acceptance Criteria:**
-  - A submitted run returns a job id and can be polled without auth leakage.
-  - Two tenants running concurrently cannot read each other's files or evidence.
-  - Worker crashes requeue the job without double-billing the same check.
-  - Cancellation stops remaining checks and records the partial evidence set.
-  - Queue depth and run duration are exported as metrics.
-
 ### QH-026 - Add tenant retention, export, and deletion controls
 
 - **Epic:** E5 Self-Serve Usage-Based Cloud Tier
@@ -349,8 +332,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-024` are complete, so `QH-025` is now
-the lowest-numbered unblocked task. `QH-025` continues the
+No task is claimed. `QH-001` through `QH-025` are complete, so `QH-026` is now
+the lowest-numbered unblocked task. `QH-026` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1004,6 +987,32 @@ commercial-critical-path chain.
   status/sync/disable flows. Full suite: 198 passing tests with Python 3.11.
   `README.md` and `BOARD.md` D26 document the billing contract.
 
+### QH-025 - Add the cloud run queue with per-tenant worker isolation
+
+- **Epic:** E5 Self-Serve Usage-Based Cloud Tier
+- **Priority:** P0
+- **Points:** 8
+- **Depends on:** QH-020, QH-021
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Added `harness/queue.py` and `JobQueue`, a durable FIFO queue
+  with per-tenant roots, owner-only job polling, cancellation through the tenant
+  kill file, crash recovery/requeue, and queue metrics. Jobs execute the
+  existing orchestrator in isolated tenant roots; metering idempotency keys
+  prevent duplicate billing on retry.
+- **Acceptance Criteria:**
+  - A submitted run returns a job id and can be polled without auth leakage.
+  - Two tenants running concurrently cannot read each other's files or evidence.
+  - Worker crashes requeue the job without double-billing the same check.
+  - Cancellation stops remaining checks and records the partial evidence set.
+  - Queue depth and run duration are exported as metrics.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_queue -v`
+- **Evidence:** `tests/test_queue.py` covers job submission and owner-only
+  polling, processing and metrics, tenant root isolation, queued/running
+  cancellation, crash recovery, retry without duplicate metering, and partial
+  evidence preservation. Full suite: 207 passing tests with Python 3.11.
+  `README.md` and `BOARD.md` D27 document the queue contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1054,3 +1063,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D24 | 2026-11-12 | Usage billing is an append-only hash-chained ledger (`quality-harness.ledger/v1`) under `.harness/ledger/entries.jsonl`, with immutable monthly close records in `periods.json`. Corrections are signed entries that reference the original entry or close id; a closed period rejects ordinary usage but accepts an explicit adjustment. Invoices derive from stored entry quantities and unit prices, and reconciliation checks the sum of quantity times unit price against the invoice total. Prices are supplied through a versioned price book; the OSS core does not embed commercial pricing. | Append-only records and hash continuity make tampering and accidental edits detectable, while explicit references preserve an auditable correction chain. Keeping close state separate from usage rows lets late events be rejected without losing earlier entries, and storing unit prices on entries keeps historical invoices reproducible even if a price book changes. | Wire ledger ingestion into `QH-024` cloud delivery, add billing-provider invoice IDs and tax handling there, and consider per-period entry compaction if run volume makes JSON Lines scanning too slow. |
 | D25 | 2026-11-12 | Self-serve signup is an idempotent onboarding store (`quality-harness.signup/v1`) that creates one workspace, one owner key, and a quota-backed free allowance, then issues an HMAC-SHA256 signed entitlement (`quality-harness.entitlement/v1`) encoding tier, limits, workspace, and effective period. Plan changes record an effective date and are rejected when they would downgrade below current usage. Entitlement verification is local and rejects tampering, workspace/period mismatch, and expiry. | Idempotency keys make retries safe without duplicate tenants or keys. Keeping the free allowance in the existing quota store makes usage visible immediately and reuses atomic monthly enforcement. HMAC signing uses only the standard library, stays offline-verifiable, and keeps commercial plan policy in caller-supplied plan JSON rather than the OSS core. | Add public-key signing and key rotation when an optional cryptography extra is approved; add email/identity proofing and billing-provider customer creation in `QH-024`. |
 | D26 | 2026-11-12 | Metered billing is an explicit, off-by-default `BillingFeatureFlag` (`enabled`, `sandbox`, allow-listed workspaces) plus a separate billing kill switch. A sandbox provider implements the provider boundary and reconciles ledger invoices to the cent. Billing calls use idempotency keys, retry transient failures, and report `degraded` without changing run or quota state. Secrets are resolved through `SecretManager` implementations (environment, in-memory, or file) and never persisted in billing state. | Keeping billing behind both a feature flag and a kill switch lets the OSS core and runs remain available during provider outages. Reusing ledger invoices as the billing source of truth preserves auditability, while idempotency keys make retries safe. Secret references keep credentials out of state and logs. | Replace the sandbox provider with a real provider adapter in a later task; add webhook handling, tax, and provider invoice IDs when sandbox credentials are available. |
+| D27 | 2026-11-12 | Cloud runs are queued in `.harness/cloud/queue.json` and execute in per-tenant roots under `.harness/tenants/<workspace>/`. Job records expose only owner-scoped fields; cross-tenant lookups return no data. Cancellation writes the tenant `.harness/KILL` file so the existing orchestrator kill switch stops remaining checks and preserves partial evidence. Crashed running jobs are recovered to queued and retried; retry uses persisted state and metering idempotency keys to avoid double billing. Queue metrics expose depth, status counts, and run durations. | Reusing the deterministic orchestrator keeps phase order, evidence, scoring, and kill behavior unchanged. Separate tenant roots provide filesystem isolation, while owner checks in the queue API prevent job metadata leakage. Idempotent metering keys make retries safe. | Add true process-level workers, sandboxed filesystem namespaces, and cancellation tokens if stronger isolation is required; add queue-depth alerting and retention in `QH-026`. |

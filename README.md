@@ -445,6 +445,33 @@ truth, creates sandbox customers/subscriptions, retries transient provider
 failures idempotently, and reports `degraded` without changing run or quota
 state. Secrets are resolved through `SecretManager` implementations.
 
+### Cloud run queue and tenant isolation
+
+Cloud runs are queued durably and executed in per-tenant roots under
+`.harness/tenants/<workspace>/`.
+
+```bash
+# Submission and polling are performed through harness.queue.JobQueue in cloud
+# adapters. A job id is returned immediately and can be polled by its owner.
+python - <<'PY'
+from pathlib import Path
+from harness.queue import JobQueue
+
+queue = JobQueue(Path(".harness-cloud"), personas_dir=Path("personas"))
+job = queue.submit("ws_acme", "/path/to/target", options={"no_browser": True})
+print(job["job_id"])
+print(queue.process_next())
+print(queue.metrics())
+PY
+```
+
+Jobs are owner-scoped: another workspace cannot read the job or its evidence.
+Cancellation writes the tenant kill file, so the orchestrator stops remaining
+checks and preserves partial evidence. Crashed running jobs can be recovered
+with `recover()` and retried without double-billing the same check because
+metering events are idempotent by run id. `harness.queue.JobQueue` exposes
+queue depth and run-duration metrics.
+
 ### Live browser checks
 
 ```bash

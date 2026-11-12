@@ -148,6 +148,7 @@ A task is done only when all of the following are true:
 | `harness/ledger.py` | Append-only usage ledger, period close, explicit corrections/adjustments, hash continuity, and CSV/JSON invoice export |
 | `harness/signup.py` | Self-serve signup, owner key issuance, free allowance, plan selection, and signed entitlements |
 | `harness/billing.py` | Feature-gated metered billing, sandbox provider, idempotent retries, degraded status, and kill switch |
+| `harness/queue.py` | Durable tenant-scoped run queue, job polling, cancellation, crash recovery, and queue metrics |
 | `harness/state.py` | Atomic progress state, events, run history, retention, and manual kill file |
 | `harness/report.py` | Stable `quality-harness.report/v1` report |
 | `schemas/metering/` | Normative JSON Schemas for the usage-event envelope and each v1 event type |
