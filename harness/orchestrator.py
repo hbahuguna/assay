@@ -1448,10 +1448,13 @@ class Orchestrator:
         if self.metering is not None:
             self.state.options["metering"] = self.metering.summary()
         generated_at = self.options.generated_at or self.state.options.get("generated_at")
+        evidence_summary = self.evidence.summary()
+        verification = self.evidence.verify()
+        evidence_summary["verification"] = verification
         report = build_report(
             self.state,
             self.workflow,
-            self.evidence.summary(),
+            evidence_summary,
             generated_at=str(generated_at) if generated_at else None,
         )
         self.state_store.save_report(report)

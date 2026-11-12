@@ -245,6 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify_report.add_argument("--signature", required=True, help="Signature hex string or path to a signature file.")
     verify_report.add_argument("--key", required=True, help="Verification key (string or path).")
 
+    verify_evidence = subparsers.add_parser(
+        "verify-evidence", help="Verify evidence manifest signatures and artifact hashes."
+    )
+    verify_evidence.add_argument("--root", default=".")
+    verify_evidence.add_argument("--run-id", default=None, help="Run id to verify; defaults to the latest run.")
+
     for command_name in ("suppress", "suppressions"):
         suppress = subparsers.add_parser(command_name, help="Manage baseline finding suppressions.")
         suppress_subparsers = suppress.add_subparsers(dest="suppress_action", required=True)
@@ -1508,6 +1514,42 @@ def _billing(args: argparse.Namespace) -> int:
         return getattr(exc, "exit_code", 2)
 
 
+def _verify_evidence(args: argparse.Namespace) -> int:
+    from .evidence import EvidenceStore
+    from .state import StateStore
+
+    root = Path(args.root).expanduser().resolve()
+    run_id = args.run_id
+    if not run_id:
+        store = StateStore(root)
+        try:
+            state = store.load()
+            run_id = state.run_id
+        except Exception:
+            # Fall back to the newest evidence directory.
+            evidence_root = root / ".harness" / "evidence"
+            candidates = sorted(path.name for path in evidence_root.iterdir() if path.is_dir()) if evidence_root.exists() else []
+            run_id = candidates[-1] if candidates else None
+    if not run_id:
+        _print_json(
+            {
+                "schema_version": "1.0",
+                "status": "error",
+                "command": "verify-evidence",
+                "error": {"type": "StateError", "message": "No run id or evidence directory found."},
+            }
+        )
+        return 2
+    result = EvidenceStore(root, run_id).verify()
+    result["command"] = "verify-evidence"
+    result["run_id"] = run_id
+    if result.get("tampered"):
+        result["confidence_cap"] = 0.0
+        result["decision"] = "hold"
+    _print_json(result)
+    return 0 if not result.get("tampered") else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1537,6 +1579,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _sign_report(args)
         if args.command == "verify-report":
             return _verify_report(args)
+        if args.command == "verify-evidence":
+            return _verify_evidence(args)
         if args.command in ("suppress", "suppressions"):
             return _suppress(args)
         if args.command == "auth":

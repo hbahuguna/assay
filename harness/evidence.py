@@ -11,13 +11,14 @@ evidence from work that already finished.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import mimetypes
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .models import CheckStatus, utc_now
 from .metering import EVENT_EVIDENCE_BYTE_STORED
@@ -43,7 +44,13 @@ def sha256_file(path: Path) -> str:
 
 
 class EvidenceStore:
-    def __init__(self, root: Path, run_id: str, metering: Any = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        run_id: str,
+        metering: Any = None,
+        signing_key: Optional[Union[bytes, str, Path]] = None,
+    ) -> None:
         self.root = Path(root).resolve()
         self.run_id = run_id
         self.metering = metering
@@ -53,7 +60,41 @@ class EvidenceStore:
         self.manifest_path = self.run_dir / "manifest.json"
         self.entries: List[Dict[str, Any]] = []
         self._finalized = False
+        self.signing_key_path = self.root / ".harness" / "evidence-signing.key"
+        self.signing_key = self._resolve_signing_key(signing_key)
         self._load_existing_manifest()
+
+    def _resolve_signing_key(self, signing_key: Optional[Union[bytes, str, Path]]) -> bytes:
+        if signing_key is None:
+            # The OSS core must remain deterministic across runs with the same
+            # run id.  The default key is therefore derived from the run id
+            # rather than from OS entropy; callers can still inject a secret key.
+            return hashlib.sha256(
+                b"quality-harness-evidence:" + str(self.run_id).encode("utf-8")
+            ).digest()
+        if isinstance(signing_key, (str, Path)):
+            path = Path(signing_key)
+            if path.exists():
+                return path.read_bytes()
+            return str(signing_key).encode("utf-8")
+        return bytes(signing_key)
+
+    def _sign_manifest(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+        payload = {key: value for key, value in manifest.items() if key not in ("signature", "signature_algorithm", "signed_at")}
+        signature = hmac.new(self.signing_key, json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8"), hashlib.sha256).hexdigest()
+        signed = dict(payload)
+        signed["signature_algorithm"] = "HMAC-SHA256"
+        signed["signed_at"] = utc_now()
+        signed["signature"] = signature
+        return signed
+
+    def _verify_signature(self, manifest: Dict[str, Any]) -> bool:
+        signature = manifest.get("signature")
+        if not isinstance(signature, str) or not signature:
+            return False
+        payload = {key: value for key, value in manifest.items() if key not in ("signature", "signature_algorithm", "signed_at")}
+        expected = hmac.new(self.signing_key, json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
 
     def _load_existing_manifest(self) -> None:
         if not self.manifest_path.exists():
@@ -241,6 +282,7 @@ class EvidenceStore:
             "evidence": list(self.entries),
             "summary": self.summary(),
         }
+        manifest = self._sign_manifest(manifest)
         self._write_manifest(manifest)
 
     def reconcile(self, checks: List[Any]) -> None:
@@ -334,6 +376,7 @@ class EvidenceStore:
                 "evidence": list(self.entries),
                 "summary": self.summary(),
             }
+            manifest = self._sign_manifest(manifest)
             self._write_manifest(manifest)
             self._finalized = True
             manifest["manifest_path"] = self._relative(self.manifest_path)
@@ -345,20 +388,76 @@ class EvidenceStore:
         return manifest
 
     def verify(self) -> Dict[str, Any]:
-        """Re-hash artifacts and report mismatches."""
+        """Re-hash artifacts, verify the manifest signature, and report tampering."""
+
+        manifest = {}
+        signature_valid = False
+        signature_error = ""
+        if self.manifest_path.exists():
+            try:
+                manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+                signature_valid = self._verify_signature(manifest)
+                if not signature_valid:
+                    signature_error = "manifest signature is missing or invalid"
+            except (OSError, ValueError) as exc:
+                signature_error = "manifest is unreadable: {}".format(exc)
+        else:
+            signature_error = "manifest is missing"
+
+        # Prefer the persisted manifest entries when verifying.
+        entries = manifest.get("evidence", self.entries)
+        if not isinstance(entries, list):
+            entries = self.entries
 
         checked = 0
         mismatches: List[Dict[str, Any]] = []
         missing: List[str] = []
-        for entry in self.entries:
-            path = self.root / entry["path"]
+        affected: List[Dict[str, Any]] = []
+        path_to_entry = {
+            str(entry.get("path", "")): entry for entry in entries if isinstance(entry, dict)
+        }
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("path"):
+                continue
+            path_text = str(entry["path"])
+            path = self.root / path_text
             if not path.exists():
-                missing.append(entry["path"])
+                missing.append(path_text)
+                affected.append({"path": path_text, "check_id": entry.get("check_id", ""), "reason": "missing"})
                 continue
             checked += 1
             actual = sha256_file(path)
-            if actual != entry["sha256"]:
+            if actual != entry.get("sha256"):
                 mismatches.append(
-                    {"path": entry["path"], "expected": entry["sha256"], "actual": actual}
+                    {
+                        "path": path_text,
+                        "check_id": entry.get("check_id", ""),
+                        "expected": entry.get("sha256"),
+                        "actual": actual,
+                    }
                 )
-        return {"checked": checked, "missing": missing, "mismatches": mismatches}
+                affected.append({"path": path_text, "check_id": entry.get("check_id", ""), "reason": "hash_mismatch"})
+
+        if signature_error:
+            affected.append({"path": self._relative(self.manifest_path), "check_id": "", "reason": "signature_invalid"})
+
+        tampered = bool(signature_error or missing or mismatches)
+        return {
+            "schema_version": "1.0",
+            "run_id": self.run_id,
+            "checked": checked,
+            "missing": missing,
+            "mismatches": mismatches,
+            "signature_valid": signature_valid,
+            "signature_error": signature_error,
+            "tampered": tampered,
+            "affected": affected,
+            "alert": {
+                "level": "error" if tampered else "ok",
+                "message": (
+                    "Evidence tampering detected: {} affected artifact(s).".format(len(affected))
+                    if tampered
+                    else "Evidence verification passed."
+                ),
+            },
+        }

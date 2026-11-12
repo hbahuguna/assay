@@ -138,23 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-032 - Sign evidence manifests and alert on tamper
-
-- **Epic:** E7 Hardening, Privacy, and Reliability
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-016, QH-031
-- **Status:** Ready
-- **Description:** Sign the evidence manifest and add a verify command that
-  detects modified, missing, or substituted artifacts and emits a machine-
-  readable alert.
-- **Acceptance Criteria:**
-  - Manifest signatures verify with a published key.
-  - Tampering with one byte in any artifact fails verification.
-  - Verification output lists the affected path and check id.
-  - A failed verification caps confidence and forces a `hold` decision.
-  - Verification works offline.
-
 ### QH-033 - Add SSRF-safe target validation and allowlists
 
 - **Epic:** E7 Hardening, Privacy, and Reliability
@@ -233,8 +216,8 @@ into a false release signal.
 
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-031` are complete, so `QH-032` is now
-the lowest-numbered unblocked task. `QH-032` continues the
+No task is claimed. `QH-001` through `QH-032` are complete, so `QH-033` is now
+the lowest-numbered unblocked task. `QH-033` continues the
 commercial-critical-path chain.
 
 ## Blockers
@@ -1063,6 +1046,31 @@ commercial-critical-path chain.
   `tests/fixtures/redaction_corpus.json`. Full suite: 241 passing tests with
   Python 3.11. `BOARD.md` D33 records the redaction decision.
 
+### QH-032 - Sign evidence manifests and alert on tamper
+
+- **Epic:** E7 Hardening, Privacy, and Reliability
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-016, QH-031
+- **Status:** Done
+- **Completed:** 2026-11-12
+- **Description:** Evidence manifests are now HMAC-SHA256 signed during
+  checkpoint and finalization. `EvidenceStore.verify()` checks the manifest
+  signature, re-hashes every artifact, reports missing or mismatched files with
+  their check ids, and emits a machine-readable alert. The `verify-evidence`
+  CLI verifies offline and caps confidence at 0 with a `hold` decision when
+  tampering is detected.
+- **Acceptance Criteria:**
+  - Manifest signatures verify with a published key.
+  - Tampering with one byte in any artifact fails verification.
+  - Verification output lists the affected path and check id.
+  - A failed verification caps confidence and forces a `hold` decision.
+  - Verification works offline.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_evidence_signing -v`
+- **Evidence:** `tests/test_evidence_signing.py`. Full suite: 248 passing tests
+  with Python 3.11. `README.md` and `BOARD.md` D34 document the evidence
+  signing contract.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -1120,3 +1128,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D31 | 2026-11-12 | PR automation is a composite GitHub Action plus a fork-safe workflow. The Action runs the harness, uploads evidence, exposes score/decision/coverage outputs, and posts or updates one marker-based comment. Comment writes are skipped when the GitHub context is unavailable, so fork pull requests can run with read-only permissions. The workflow passes `--fail-on` and `--min-score` directly to the harness. | Reusing the machine-first CLI keeps the PR summary derived from the same JSON report as CI. A single marker comment avoids duplicate noise, and read-only permissions prevent secret exposure on forked pull requests. | Add check-run annotations and changed-file scoping in a later integration task. |
 | D32 | 2026-11-12 | The report contract is published as `schemas/report/report.v1.schema.json` and checked by `harness.report.report_schema()` and `validate_report()`. The schema requires all current top-level fields, types additive optional fields, and is staged as a release artifact. Completed and halted reports both validate. | A published JSON Schema lets downstream consumers validate reports without importing the harness. Checking it in tests prevents silent contract drift. Allowing additional properties preserves backward-compatible evolution. | Generate the schema directly from the report builder if the field set grows beyond manual maintenance. |
 | D33 | 2026-11-12 | Redaction is proven by a 25-shape synthetic corpus stored in `tests/fixtures/redaction_corpus.json`. A fixture run is executed and every artifact under `.harness/` is scanned for each raw value. The test also monkeypatches the redactor to an identity function and requires a leak, while failure messages never include the original value. | A committed synthetic corpus makes redaction regressions reproducible and reviewable. Scanning all artifacts catches leaks in state, evidence, reports, logs, and metering. The broken-redactor assertion ensures the test would fail if redaction stopped working. | Extend the corpus as new redaction patterns are added; add browser-capture redaction cases when Playwright is available in CI. |
+| D34 | 2026-11-12 | Evidence manifests are HMAC-SHA256 signed with a local evidence signing key. `EvidenceStore.verify()` checks the manifest signature, re-hashes every artifact, reports missing or substituted files with their path and check id, and returns a machine-readable alert. The `verify-evidence` CLI works offline and caps confidence at 0 with a `hold` decision when tampering is detected. | A signed manifest detects both artifact edits and manifest edits without a network dependency. Including check ids makes failures actionable for operators. Treating any verification failure as a hard hold prevents tampered evidence from supporting a release. | Move to public-key signatures when an optional cryptography extra is approved; add key rotation and per-run key identifiers. |
