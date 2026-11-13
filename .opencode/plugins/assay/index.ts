@@ -1,40 +1,14 @@
 import { Plugin } from "@opencode/plugin"
-import { execFile } from "node:child_process"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { promisify } from "node:util"
 
-import { assayInvocation, browserInvocation, demoInvocation } from "./command-args.ts"
+import { browserInvocation, demoInvocation } from "./command-args.ts"
+import { runAgentLoop } from "./agent.ts"
+import { browserEnv, runAssay } from "./runner.ts"
 
-const execFileAsync = promisify(execFile)
-const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = process.env.ASSAY_ROOT || resolve(PLUGIN_DIR, "../../..")
 const PERSONAS = resolve(REPO_ROOT, "personas")
-
-// A browser run normally targets a developer's local server. Loopback is
-// opt-in per browser invocation; private and metadata networks stay blocked.
-function browserEnv(): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  if (!env.QH_SSRF_ALLOWLIST) {
-    env.QH_SSRF_ALLOWLIST = "127.0.0.0/8,::1,localhost"
-  }
-  return env
-}
-
-async function runAssay(args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
-  try {
-    const { stdout, stderr } = await execFileAsync(PYTHON, ["-P", "-m", "harness", ...args], {
-      encoding: "utf-8",
-      cwd,
-      env: { ...(env || process.env), PYTHONPATH: REPO_ROOT },
-    })
-    return stdout || stderr || "(no output)"
-  } catch (error) {
-    const failure = error as { stderr?: string; message?: string; stdout?: string }
-    return `assay failed:\n${failure.stderr || failure.stdout || failure.message || String(error)}`
-  }
-}
 
 const assayCommands = [
   { name: "assay-manager", label: "manager" },
@@ -98,23 +72,73 @@ const assayCommands = [
   { name: "assay-pro", label: "pro" },
 ]
 
+async function sendPrompt(ctx: any, sessionID: string, text: string, noReply = false): Promise<any> {
+  // Try SDK-style client
+  try {
+    if (ctx.client?.session?.prompt) {
+      return await ctx.client.session.prompt({
+        path: { id: sessionID },
+        body: { noReply, parts: [{ type: "text", text }] },
+      })
+    }
+  } catch {}
+  // Try legacy style
+  try {
+    if (ctx.session?.prompt) {
+      return await ctx.session.prompt({ sessionID, text, noReply })
+    }
+  } catch {}
+  return null
+}
+
 export default Plugin.define({
   id: "assay",
-  async setup(ctx) {
-    await ctx.command.transform((editor) => {
+  async setup(ctx: any) {
+    await ctx.command.transform((editor: any) => {
       editor.add({
         name: "assay",
-        description: "Run quality-harness: /assay <command> [args...]",
-        execute: async ({ sessionID, prompt }) => {
-          const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
-          const { args } = assayInvocation(prompt.text || "", PERSONAS)
-          const output = await runAssay(args, projectDirectory)
-          await ctx.session.prompt({
-            sessionID,
-            text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+        description: "Run quality-harness autonomous agent: /assay <goal>",
+        execute: async ({ sessionID, prompt }: { sessionID: string; prompt: { text?: string } }) => {
+          const projectDirectory =
+            ctx.location?.project?.canonical ||
+            ctx.location?.project?.directory ||
+            ctx.location?.directory ||
+            process.cwd()
+          const goal = (prompt.text || "").trim() || "Assess release readiness of the target."
+
+          const progress = (message: string) => {
+            process.stderr.write(`[assay-agent] ${message}\n`)
+            void sendPrompt(ctx, sessionID, `[assay-agent] ${message}`, true)
+          }
+
+          const askLlm = async (text: string): Promise<string> => {
+            try {
+              const gen = ctx.experimental?.generate?.text || ctx.generate?.text
+              if (gen) {
+                const out = await gen({ prompt: text })
+                if (typeof out === "string") return out
+                if (out?.text) return out.text
+                if (out?.content) return out.content
+              }
+            } catch {}
+            const resp = await sendPrompt(ctx, sessionID, text, false)
+            const parts = resp?.parts || resp?.data?.parts || []
+            const textOut = parts.map((p: any) => p.text || "").join("\n")
+            if (textOut) return textOut
+            throw new Error("LLM response unavailable")
+          }
+
+          await runAgentLoop(goal, PERSONAS, {
+            runHarness: (args, env) => runAssay(args, projectDirectory, env),
+            askLlm,
+            progress,
+            sendFinal: async (text) => {
+              await sendPrompt(ctx, sessionID, text, false)
+            },
           })
         },
       })
+
       for (const command of assayCommands) {
         const isBrowser = command.name === "assay-browser"
         const isDemo = command.name === "assay-demo"
@@ -125,36 +149,55 @@ export default Plugin.define({
             : isDemo
               ? "Run quality-harness demo assessment (optional URL for live checks)"
               : `Run quality-harness ${command.label} assessment`,
-          execute: async ({ sessionID, prompt }) => {
-            const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
+          execute: async ({ sessionID, prompt }: { sessionID: string; prompt: { text?: string } }) => {
+            const projectDirectory =
+              ctx.location?.project?.canonical ||
+              ctx.location?.project?.directory ||
+              ctx.location?.directory ||
+              process.cwd()
             if (isBrowser) {
               const invocation = browserInvocation(prompt.text || "", PERSONAS)
               if (invocation.error) {
-                await ctx.session.prompt({ sessionID, text: invocation.error })
+                await sendPrompt(ctx, sessionID, invocation.error)
                 return
               }
               const output = await runAssay(invocation.args, projectDirectory, browserEnv())
-              await ctx.session.prompt({
+              await sendPrompt(
+                ctx,
                 sessionID,
-                text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
-              })
+                `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              )
               return
             }
             if (isDemo) {
               const invocation = demoInvocation(prompt.text || "", PERSONAS)
               const env = invocation.args.includes("--no-browser") ? undefined : browserEnv()
               const output = await runAssay(invocation.args, projectDirectory, env)
-              await ctx.session.prompt({
+              await sendPrompt(
+                ctx,
                 sessionID,
-                text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
-              })
+                `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              )
               return
             }
-            const output = await runAssay(["run", "--target", ".", "--no-browser", "--personas-dir", PERSONAS, "--intent", `Assay ${command.label} assessment`], projectDirectory)
-            await ctx.session.prompt({
+            const output = await runAssay(
+              [
+                "run",
+                "--target",
+                ".",
+                "--no-browser",
+                "--personas-dir",
+                PERSONAS,
+                "--intent",
+                `Assay ${command.label} assessment`,
+              ],
+              projectDirectory,
+            )
+            await sendPrompt(
+              ctx,
               sessionID,
-              text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
-            })
+              `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+            )
           },
         })
       }

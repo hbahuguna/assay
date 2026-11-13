@@ -1178,6 +1178,43 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
+### QH-105 - Make /assay an autonomous agent loop
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P1
+- **Points:** 8
+- **Depends on:** QH-098
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Implemented an OpenCode-plugin agent loop for `/assay`. The
+  command now runs an initial deterministic harness assessment, then iterates up
+  to 7 times asking the LLM for the next single harness command (or `done`)
+  from an allowlist (`run`, `report`, `status`, `abort`, `assay-browser`,
+  `assay-demo`). Browser checks are allowed when a URL is known. Progress is
+  streamed to stderr and best-effort no-reply session messages; the loop ends by
+  sending a synthesized narrative, all run IDs, and fix suggestions. The Python
+  core and scoring remain unchanged.
+- **Acceptance Criteria:**
+  - `/assay <goal>` runs at least the initial harness pass and enters an agent
+    loop capped at 7 iterations.
+  - The LLM decides the next command from an allowlist; out-of-allowlist
+    proposals are rejected with a recorded reason.
+  - Browser checks can be triggered when a URL is available.
+  - Progress is streamed to the terminal during the loop.
+  - The final message is a synthesized narrative plus run IDs and fix
+    suggestions.
+  - The Python core and its invariants are unchanged.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `node --test tests/plugin/agent-loop.test.mjs tests/plugin/command-args.test.mjs`
+- **Evidence:** `.opencode/plugins/assay/agent.ts` (loop, parsing, allowlist,
+  command mapping), `.opencode/plugins/assay/runner.ts` (harness execution),
+  `.opencode/plugins/assay/index.ts` (default `/assay` agent wiring, progress,
+  multi-API prompt support). New tests verify decision parsing, allowlist
+  enforcement, browser/demo argument mapping, and a capped/done loop that
+  returns run IDs and fix suggestions. All 18 plugin tests pass. Python suite:
+  300 passing tests (unchanged core).
+
 ### QH-102 - Scope CI detection to first-party workspace roots
 
 - **Epic:** E8 Carbon Test Category Coverage
