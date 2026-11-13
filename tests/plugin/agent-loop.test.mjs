@@ -84,7 +84,7 @@ test("runAgentLoop executes an allowed browser command", async () => {
   const browserCall = calls.find((args) => args.includes("http://localhost:3000"))
   assert.ok(browserCall, "browser command should be executed")
   assert.equal(browserCall.includes("--no-browser"), false)
-  assert.match(finalMessages.at(-1), /Run IDs: run-1, run-2/)
+  assert.match(finalMessages.at(-1), /## Run IDs\nrun-1, run-2/)
 })
 
 test("runAgentLoop respects initial invocation for demo", async () => {
