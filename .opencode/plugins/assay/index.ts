@@ -36,7 +36,52 @@ function deliverUserReply(sessionID: string, text: string): boolean {
   return true
 }
 
-import { browserInvocation, demoInvocation } from "./command-args.ts"
+import { browserInvocation, demoInvocation, extractUrl } from "./command-args.ts"
+
+function shellQuote(s: string): string {
+  return `'${String(s).replace(/'/g, "'\\''")}'`
+}
+
+function buildBrowserAgentPrompt(url: string, args: string[], projectDirectory: string): string {
+  const python = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
+  const repoRoot = process.env.ASSAY_ROOT || REPO_ROOT
+  const ssrf = process.env.QH_SSRF_ALLOWLIST || "127.0.0.0/8,::1,localhost"
+  const cmd = [python, "-P", "-m", "harness", ...args].map(shellQuote).join(" ")
+  const envPrefix = `PYTHONPATH=${shellQuote(repoRoot)} QH_SSRF_ALLOWLIST=${shellQuote(ssrf)}`
+  return `You are the **Assay Browser** agent running an autonomous, interactive quality-harness assessment in this OpenCode session.
+
+## Target
+- URL: ${url}
+- Project directory (cwd): ${projectDirectory}
+- Harness repo/root (PYTHONPATH): ${repoRoot}
+
+## Mission
+Perform a real browser assessment and continue through iterations **in this same session**. After each step/checkpoint, ask the user for context using OpenCode's native interactive questioning and **wait for their answer**, then continue automatically (no reruns, no asking the user to type a new command). Do not stop until you have enough evidence and have explained gaps/limitations.
+
+## Invariants (must preserve)
+- **Deterministic harness owns execution/evidence/scoring:** run checks via \`python -P -m harness ...\` only; do not invent findings, scores, decisions, or evidence. Interpret and summarize harness output; do not override phase order or scoring.
+- **Fixed phases/order:** Risk Analysis → Test Planning → Execution → Evidence Collection → Confidence Scoring (owned by orchestrator).
+- **JSON-only \`run\` stdout is the report;** progress/warnings go to stderr. Use \`run\` output as source of truth.
+- **Evidence is hashed and stored under \`.harness/\`;** never claim evidence you did not capture. Blocked/skipped/errored/refused checks are **coverage gaps, never passes** and never raise confidence.
+- **No repeated commands/tests:** never execute the same harness command/args twice. Track every executed command and run ID.
+- **No secrets:** never ask for or persist raw credentials/tokens/cookies/keys in chat, logs, or evidence. For third-party context tokens/credentials require a secure env/secret reference or storage-state path only (opt-in, user-authorized).
+- **Safety:** do not submit real transactions, create accounts, brute-force, or access other tenants' data. Safe active probes (toggles/tabs, client-side form fill/validation without submit) are allowed; form submission/auth/multi-step/state-mutating flows require explicit safe test environment, authorized test credentials/storage-state, and allowlisted non-destructive actions—otherwise record as a limitation/gap.
+- **Scope:** URL-only run means \`source\` may be null (no source/deploy inspection) unless \`--source\`/repo context is provided. Automated a11y ≠ WCAG conformance; security checks are bounded (not a pentest).
+
+## How to run harness commands
+- Run from cwd \`${projectDirectory}\` using: \`${envPrefix} ${cmd}\` (this is the **initial assessment**; it includes comprehensive browser defaults: crawl, max-pages 8, mobile, headed, active unless overridden).
+- For additional unique steps, run \`${envPrefix} ${python} -P -m harness <args>\` (allowed subcommands: \`run\`, \`report\`, \`status\`, \`abort\`). Use the same personas/intent/target context as appropriate; do not add \`--no-browser\` for browser assessment steps.
+- Read and parse the JSON report from each \`run\`; record run_id, status, decision, confidence/coverage, checks (id/status/evidence/routes/notes), findings, evidence directory, and limitations.
+
+## Interactive flow (native, no reruns)
+1. **Iteration 1 (now):** execute the initial assessment command above. Summarize what was executed (all checks/routes/evidence/limitations) and the run ID.
+2. **Test plan:** create a comprehensive test plan from available context/report (journeys, routes/pages, forms/inputs/validation, CTAs/buttons/toggles, auth/stateful flows, search/filters, errors/empty states, responsive/a11y/security; mark what needs credentials/submission/interaction beyond safe probes or is URL-only/source-unavailable). Show it to the user.
+3. **Context checkpoint (every iteration, before next unique step):** ask the user for additional context using OpenCode's native interactive question flow (priority: Jira → Slack → GitHub → Doc → URL/Text) and always include a **Skip** option. If they choose to provide third-party context, ask how to proceed (plain text paste, connect via MCP with explicit server/id, or secure env/secret reference for token — never pasted). Wait for the answer in this session, record the decision (or skip/gap), then continue.
+4. **Execute next unique step:** choose and run ONE new harness command from the plan that adds evidence (never repeat). After it completes, report what was executed and return to step 3.
+5. **Finish:** only when evidence/gaps are explained and coverage is sufficient (or no further safe unique steps). Provide: synthesized narrative assessment, the test plan, detailed “what was executed” (all runs/checks/evidence/limitations), **all run IDs**, context decisions/assumptions, and concrete developer fix suggestions. Clearly distinguish observed evidence from limitations/gaps.
+
+Begin now with iteration 1 (run the initial assessment), then proceed interactively.`
+}
 import { runAgentLoop } from "./agent.ts"
 import { browserEnv, runAssay } from "./runner.ts"
 
@@ -326,20 +371,9 @@ export default Plugin.define({
                 await sendPrompt(ctx, sessionID, invocation.error)
                 return
               }
-              await runAgentLoop(
-                {
-                  goal: "Assay browser assessment",
-                  personasDir: PERSONAS,
-                  initialArgs: invocation.args,
-                  initialEnv: browserEnv(),
-                  cwd: projectDirectory,
-                  userInput: raw,
-                  stateKey: stateKeyBase,
-                  sessionID,
-                  interactive: true,
-                },
-                deps,
-              )
+              const url = invocation.args[invocation.args.indexOf("--target") + 1] || extractUrl(prompt.text || "") || ""
+              const agentPrompt = buildBrowserAgentPrompt(url, invocation.args, projectDirectory)
+              await sendPrompt(ctx, sessionID, agentPrompt, false)
               return
             }
             if (isDemo) {
