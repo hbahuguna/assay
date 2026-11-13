@@ -734,7 +734,17 @@ def _is_test_credential_fixture(value: str, rel: str) -> bool:
         return False
     lower = value.lower()
     return lower.startswith(
-        ("sk_test", "pk_test", "whsec_test", "test-", "test_", "dummy-", "dummy_")
+        (
+            "sk_test",
+            "pk_test",
+            "whsec_test",
+            "test-",
+            "test_",
+            "dummy-",
+            "dummy_",
+            "llm-",
+            "ambient-",
+        )
     )
 
 

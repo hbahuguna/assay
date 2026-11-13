@@ -81,7 +81,8 @@ class StaticPrecisionTests(unittest.TestCase):
             (target / "tests" / "test_billing.py").write_text(
                 "secret = 'sk_test_dummy'\n"
                 "api_key = 'whsec_test_secret'\n"
-                "token = 'test-key'\n",
+                "token = 'test-key'\n"
+                "api_key = 'llm-openai-test'\n",
                 encoding="utf-8",
             )
             (target / "pyproject.toml").write_text(
@@ -104,7 +105,7 @@ class StaticPrecisionTests(unittest.TestCase):
                 check for check in report["checks"] if check["id"] == "static.secrets"
             )
             self.assertGreaterEqual(
-                secrets_check["metadata"]["ignored_placeholder_or_test_fixture_matches"], 3
+                secrets_check["metadata"]["ignored_placeholder_or_test_fixture_matches"], 4
             )
 
     def test_inner_html_is_still_reported(self):

@@ -2567,6 +2567,34 @@ request to restore trust in the static report before continuing category work.
   updated in the working tree but is part of the pre-existing untracked
   `assay-carbon-*` rename set, so it was not staged in this commit.
 
+### QH-103 - Skip provider-shaped fake credentials in test paths
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 1
+- **Depends on:** QH-100
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** A re-scan after QH-100 still reported six medium
+  "credential-like value" findings for `llm-openai...`, `llm-anthropic...`, and
+  similar fixture values in a test file. Those values are synthetic provider
+  names, not credentials. The test-path allowlist now also recognizes `llm-`
+  and `ambient-` fake prefixes. The skip remains value-based and applies only
+  to test paths, so a real-looking value in a test file is still reported.
+- **Acceptance Criteria:**
+  - A test file containing an `llm-openai-test` value produces no credential
+    finding and increments the recorded skip count.
+  - A real-looking high-entropy value in non-test source still produces a
+    finding.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_static_precision -v`
+- **Evidence:** `tests/test_static_precision.py` covers the extra fixture value
+  and the real-looking non-test value. A fresh Test-Radius scan moved
+  `static.secrets` from failed to passed (0 matches, 18 skipped fixtures) and
+  raised quality from 40.3 to 61.6 without changing the remaining real findings.
+  Full suite: 300 passing tests with Python 3.11.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
