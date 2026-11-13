@@ -26,6 +26,8 @@ export interface AgentOptions {
   userInput?: string
   /** Stable key for persisted agent state across invocations. */
   stateKey?: string
+  /** Session ID for interactive resume in chat. */
+  sessionID?: string
 }
 
 const DEFAULT_MAX_ITERATIONS = 7
@@ -50,6 +52,8 @@ interface AgentState {
   version: 1
   key: string
   goal: string
+  sessionID?: string
+  initialArgs?: string[]
   testPlan: string
   executedCommands: string[]
   runIds: string[]
@@ -111,13 +115,13 @@ function formatNeedContext(pending: Pending, mcpResources: string[], goal: strin
 ${requested.join("\n")}
 ${mcpSection}
 
-## Choose a method (reply/rerun with one)
-1. **Plain text paste (recommended):** \`/assay ${goal} [source:${type} method:paste] <paste the context here>\`
-2. **Connect via MCP:** \`/assay ${goal} [source:${type} method:mcp server:<name> id:<identifier>]\` (confirm which MCP resource/server to use; provide exact ID/URL)
-3. **Safely submitted API token (opt-in):** \`/assay ${goal} [source:${type} method:token env:<ENV_VAR_OR_SECRET_REF> id:<identifier>]\` — do **not** paste tokens/secrets into chat. Use a secure local env/secret reference configured for the connector. If not configured, choose paste or MCP.
-4. **Skip this context:** \`/assay ${goal} [context:skip]\`
+## Choose a method (reply in this chat)
+1. **Plain text paste (recommended):** reply with \`[source:${type} method:paste] <paste the context here>\`
+2. **Connect via MCP:** reply with \`[source:${type} method:mcp server:<name> id:<identifier>]\` (confirm which MCP resource/server to use; provide exact ID/URL)
+3. **Safely submitted API token (opt-in):** reply with \`[source:${type} method:token env:<ENV_VAR_OR_SECRET_REF> id:<identifier>]\` — do **not** paste tokens/secrets into chat. Use a secure local env/secret reference configured for the connector. If not configured, choose paste or MCP.
+4. **Skip this context:** reply with \`[context:skip]\`
 
-> After you provide the method/context (or skip), I will proceed to the next unique test step and ask for context again. No previously executed test/command will be repeated.`
+> Reply here to continue in this session. You can also rerun \`/assay ${goal} ...\` with the same tag if needed. After your response I will proceed to the next unique test step and ask for context again. No previously executed test/command will be repeated.`
   }
 
   return `## Context requested before next iteration (same intent)
@@ -132,19 +136,19 @@ ${mcpSection}
 ${requested.join("\n")}
 ${mcpSection}
 
-## Your choice (reply/rerun with one)
-1. **Skip this context:** \`/assay ${goal} [context:skip]\` — proceed without this context; gaps/assumptions will be recorded explicitly.
-2. **Provide context** (choose source: Jira/Slack/GitHub/Doc/URL/Text). Reply with the source and I will ask how you want to proceed (plain text paste, MCP, or safely submitted API token), e.g.:
-   - \`/assay ${goal} [source:jira] <brief note>\`
-   - \`/assay ${goal} [source:jira method:paste] <paste AC/story>\`
-   - \`/assay ${goal} [source:slack method:mcp server:<name> id:<thread>]\`
+## Your choice (reply in this chat)
+1. **Skip this context:** reply with \`[context:skip]\` — proceed without this context; gaps/assumptions will be recorded explicitly.
+2. **Provide context** (choose source: Jira/Slack/GitHub/Doc/URL/Text). Reply with the source and I’ll ask how to proceed (plain text paste, MCP, or safely submitted API token), e.g.:
+   - \`[source:jira] <brief note>\`
+   - \`[source:jira method:paste] <paste AC/story>\`
+   - \`[source:slack method:mcp server:<name> id:<thread>]\`
 
 ## Method options when providing third-party context
 - **Plain text paste (recommended):** paste relevant story/AC/thread/notes directly.
 - **Connect via MCP:** provide exact identifier and confirm MCP resource/server.
 - **Safely submitted API token (opt-in):** provide a secure env/secret reference only (never paste secrets).
 
-> After your response, I will proceed to the next unique test step (or record skip) and ask for context again. No previously executed test/command will be repeated.`
+> Reply here to continue in this session (or rerun \`/assay ${goal} ...\` with the same tag if needed). After your response I will proceed to the next unique test step (or record skip) and ask for context again. No previously executed test/command will be repeated.`
 }
 
 function extractRunIds(output: string): string[] {
@@ -371,6 +375,8 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
       version: 1,
       key,
       goal,
+      sessionID: options.sessionID,
+      initialArgs: options.initialArgs,
       testPlan: "",
       executedCommands: [],
       runIds: [],
@@ -381,6 +387,9 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
       step: 1,
       initialDone: false,
     }
+  } else {
+    if (options.sessionID) state.sessionID = options.sessionID
+    if (!state.initialArgs && options.initialArgs) state.initialArgs = options.initialArgs
   }
 
   log(`Starting autonomous assay agent (interactive, max ${maxIterations} iterations)`)
