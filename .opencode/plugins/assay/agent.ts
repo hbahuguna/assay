@@ -383,6 +383,11 @@ async function requestContextAndMaybeWait(
   if (options.interactive && deps.requestUserInput) {
     while (state.pending) {
       const reply = await deps.requestUserInput("awaiting assay context")
+      if (String(reply) === "__ASSAY_WAIT_TIMEOUT__") {
+        await deps.sendFinal("Still waiting for your reply in this chat to continue the assay flow. Reply with `skip`, paste context, or a `[source:... method:...]` tag. (Session state is saved; if needed, rerun the same command with your reply tag to resume.)")
+        saveState(cwd, state)
+        return false
+      }
       const applied = applyContextResponse(state, String(reply || ""))
       saveState(cwd, state)
       if (applied.message) {
@@ -411,6 +416,11 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
 
   let state = loadState(cwd, key)
   const userInput = String(options.userInput || "")
+  const hasContextResponse = /(\[context:skip\]|\[source:(jira|slack|github|doc|url|text)\]|\[method:(paste|mcp|token)\]|\bskip\s+context\b)/i.test(userInput) || /^(skip|none|no|n\/a|na)$/i.test(userInput.trim())
+  if (state && options.interactive && !hasContextResponse && state.pending) {
+    // Fresh interactive command invocation: start a new run instead of resuming stale pending state.
+    state = null
+  }
   if (state && userInput) {
     const applied = applyContextResponse(state, userInput)
     saveState(cwd, state)

@@ -6,10 +6,22 @@ import { join } from "node:path"
 
 const replyWaiters = new Map<string, Array<(text: string) => void>>()
 
-function waitForUserReply(sessionID: string): Promise<string> {
+function waitForUserReply(sessionID: string, timeoutMs = 10 * 60 * 1000): Promise<string> {
   return new Promise((resolveWait) => {
     const list = replyWaiters.get(sessionID) || []
-    list.push(resolveWait)
+    const wrapped = (text: string) => {
+      clearTimeout(timer)
+      resolveWait(text)
+    }
+    const timer = setTimeout(() => {
+      const cur = replyWaiters.get(sessionID) || []
+      const idx = cur.indexOf(wrapped)
+      if (idx >= 0) cur.splice(idx, 1)
+      if (cur.length === 0) replyWaiters.delete(sessionID)
+      else replyWaiters.set(sessionID, cur)
+      resolveWait("__ASSAY_WAIT_TIMEOUT__")
+    }, timeoutMs)
+    list.push(wrapped)
     replyWaiters.set(sessionID, list)
   })
 }
