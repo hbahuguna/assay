@@ -1,17 +1,33 @@
 import { Plugin } from "@opencode/plugin"
 import { execFile } from "node:child_process"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
+
+import { assayInvocation, browserInvocation } from "./command-args.ts"
 
 const execFileAsync = promisify(execFile)
 const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
-const PERSONAS = "/Users/skaparwan/github/assay/personas"
+const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = process.env.ASSAY_ROOT || resolve(PLUGIN_DIR, "../../..")
+const PERSONAS = resolve(REPO_ROOT, "personas")
 
-async function runAssay(args: string[], cwd: string): Promise<string> {
+// A browser run normally targets a developer's local server. Loopback is
+// opt-in per browser invocation; private and metadata networks stay blocked.
+function browserEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  if (!env.QH_SSRF_ALLOWLIST) {
+    env.QH_SSRF_ALLOWLIST = "127.0.0.0/8,::1,localhost"
+  }
+  return env
+}
+
+async function runAssay(args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
   try {
     const { stdout, stderr } = await execFileAsync(PYTHON, ["-P", "-m", "harness", ...args], {
       encoding: "utf-8",
       cwd,
-      env: { ...process.env, PYTHONPATH: "/Users/skaparwan/github/assay" },
+      env: { ...(env || process.env), PYTHONPATH: REPO_ROOT },
     })
     return stdout || stderr || "(no output)"
   } catch (error) {
@@ -91,21 +107,7 @@ export default Plugin.define({
         description: "Run quality-harness: /assay <command> [args...]",
         execute: async ({ sessionID, prompt }) => {
           const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
-          const text = (prompt.text || "").trim()
-          const tokens = text.split(/\s+/).filter(Boolean)
-          const subcommands = new Set(["run", "status", "report", "abort", "personas", "verify-evidence", "auth", "quota", "ledger", "signup", "billing", "calibrate", "sarif", "junit", "sign-report", "verify-report", "prune"])
-          let args: string[]
-          if (tokens.length === 0) {
-            args = ["run", "--target", ".", "--no-browser", "--personas-dir", PERSONAS]
-          } else if (tokens[0] === "--version" || tokens[0] === "-v") {
-            args = ["--version"]
-          } else if (tokens[0] === "help" || tokens[0] === "--help" || tokens[0] === "-h") {
-            args = ["--help"]
-          } else if (subcommands.has(tokens[0])) {
-            args = tokens
-          } else {
-            args = ["run", "--target", ".", "--no-browser", "--personas-dir", PERSONAS, "--intent", text]
-          }
+          const { args } = assayInvocation(prompt.text || "", PERSONAS)
           const output = await runAssay(args, projectDirectory)
           await ctx.session.prompt({
             sessionID,
@@ -114,11 +116,28 @@ export default Plugin.define({
         },
       })
       for (const command of assayCommands) {
+        const isBrowser = command.name === "assay-browser"
         editor.add({
           name: command.name,
-          description: `Run quality-harness ${command.label} assessment`,
-          execute: async ({ sessionID }) => {
-            const output = await runAssay(["run", "--target", ".", "--no-browser", "--personas-dir", PERSONAS, "--intent", `Assay ${command.label} assessment`], ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd())
+          description: isBrowser
+            ? "Run quality-harness live browser assessment (requires a URL)"
+            : `Run quality-harness ${command.label} assessment`,
+          execute: async ({ sessionID, prompt }) => {
+            const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
+            if (isBrowser) {
+              const invocation = browserInvocation(prompt.text || "", PERSONAS)
+              if (invocation.error) {
+                await ctx.session.prompt({ sessionID, text: invocation.error })
+                return
+              }
+              const output = await runAssay(invocation.args, projectDirectory, browserEnv())
+              await ctx.session.prompt({
+                sessionID,
+                text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              })
+              return
+            }
+            const output = await runAssay(["run", "--target", ".", "--no-browser", "--personas-dir", PERSONAS, "--intent", `Assay ${command.label} assessment`], projectDirectory)
             await ctx.session.prompt({
               sessionID,
               text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,

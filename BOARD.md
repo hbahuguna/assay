@@ -2326,6 +2326,43 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   planning, execution, report inclusion, hashed manifest linkage, and absence
   for non-browser intents. Full suite: 277 passing tests with Python 3.11.
 
+### QH-097 - Make /assay-browser run live browser checks instead of a static scan
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P0
+- **Points:** 3
+- **Depends on:** QH-042
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Worked out of order at operator request because the shipped
+  `/assay-browser` command passed `--no-browser` and a directory target, so it
+  could only record `static.browser_category` and never exercised the rendered
+  page. The OpenCode plugin and wrapper now require a URL, omit `--no-browser`,
+  and pass the URL as the target. When live browser checks are planned, the
+  redundant `static.browser_category` scope marker is skipped so the category is
+  represented by real browser evidence. Missing URLs produce actionable guidance
+  instead of a browser-labelled static pass. Playwright/Chromium absence remains
+  a `blocked` coverage gap.
+- **Acceptance Criteria:**
+  - `/assay-browser <url>` plans and executes the `browser.*` checks against the
+    URL and does not pass `--no-browser`.
+  - `/assay-browser` without a URL refuses to run and explains the required
+    argument; it never silently falls back to a static scan.
+  - When live browser checks are planned, the redundant
+    `static.browser_category` marker is not planned.
+  - The generic `/assay` command treats an explicit URL as a browser target
+    instead of ignoring it.
+  - Missing Playwright/Chromium still yields `blocked` browser checks, never a
+    pass.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_assay_command_contract -v`
+- **Evidence:** `tests/test_assay_command_contract.py` verifies the pure Node
+  command builder, URL-required behavior, planning of real browser checks for a
+  URL target, and a live Chromium run that produces non-blocked browser checks.
+  `.opencode/plugins/assay/command-args.ts` isolates the argument contract for
+  `node --test`; `tests/plugin/command-args.test.mjs` covers URL extraction,
+  flag pass-through, and the absence of `--no-browser`.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2390,3 +2427,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D38 | 2026-11-12 | Seeded runs persist `seed`, `clock_mode`, `frozen_clock`, and an `id_sequence` counter in run options. `make_determinism` accepts an `entropy_counter`, and the orchestrator saves the current counter with every state write. Resume restores those options before creating the determinism provider, so a resumed run continues the SHA-256 id sequence instead of restarting it. | Continuing the counter prevents finding-id collisions and makes resumed deterministic runs comparable to an uninterrupted run. Restoring clock and seed options prevents mixing determinism modes. Persisting the counter at each state save keeps partial runs recoverable. | Replace the context-scoped provider with explicit provider arguments if concurrent in-process runs need independent counters. |
 | D39 | 2026-11-12 | The assay category is represented by an OpenCode `/assay` slash command and native plugin command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The command makes the assay entry point available in OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |
 | D40 | 2026-11-12 | The `/jay` manager category is represented by `/assay help`, which prints the harness CLI contract. The existing `/assay` command remains the primary risk-based entry point, so no separate scoring or execution path is needed. | A manager entry point should expose available commands and options without duplicating run logic. Keeping it as help preserves the deterministic CLI contract and avoids a parallel command implementation. | Add richer interactive guidance only if the harness gains a conversational layer beyond the CLI. |
+| D41 | 2026-11-13 | `/assay-browser` is a live-browser command, not a static category alias. It requires an explicit http(s) URL, passes the URL as `--target`, and never injects `--no-browser`. The OpenCode plugin adds a loopback-only SSRF allowlist (`127.0.0.0/8`, `::1`, `localhost`) for that invocation unless the operator already set one; private and metadata networks remain blocked. A missing URL returns actionable guidance instead of running. | The previous wrapper combined a browser intent with `--no-browser` and a directory target, which could only produce `static.browser_category`. Requiring a URL keeps the command honest, while the loopback allowlist makes local dev servers usable without weakening the default SSRF posture for arbitrary hosts. | Revisit the loopback default if browser runs move to isolated cloud workers where localhost has different meaning. |

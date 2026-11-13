@@ -1,0 +1,158 @@
+/**
+ * Pure argument builders for the OpenCode `/assay*` commands.
+ *
+ * Keeping this logic free of plugin/runtime imports lets it be unit-tested
+ * with `node --test` and avoids regressing the browser command back into a
+ * `--no-browser` static scan.
+ */
+
+export const SUBCOMMANDS = new Set([
+  "run",
+  "status",
+  "report",
+  "abort",
+  "personas",
+  "verify-evidence",
+  "auth",
+  "quota",
+  "ledger",
+  "signup",
+  "billing",
+  "calibrate",
+  "sarif",
+  "junit",
+  "sign-report",
+  "verify-report",
+  "prune",
+])
+
+const BROWSER_BOOLEAN_FLAGS = new Set([
+  "--headed",
+  "--mobile",
+  "--mobile-pack",
+  "--responsive",
+  "--browser-har",
+  "--browser-trace",
+  "--browser-video",
+])
+
+const BROWSER_VALUE_FLAGS = new Set([
+  "--viewport",
+  "--mobile-viewport",
+  "--timeout",
+  "--kill-on",
+  "--max-checks",
+  "--fail-on",
+  "--min-score",
+  "--seed",
+])
+
+export interface Invocation {
+  args: string[]
+  error?: string
+}
+
+/** Return the first http(s) URL in a free-form request, if any. */
+export function extractUrl(text: string): string | null {
+  const match = /\bhttps?:\/\/[^\s"'`<>]+/i.exec(text || "")
+  if (!match) {
+    return null
+  }
+  return match[0].replace(/[),.;:!?]+$/g, "")
+}
+
+/** Return true when the value is an absolute http(s) URL. */
+export function isUrl(value: string): boolean {
+  return /^https?:\/\//i.test((value || "").trim())
+}
+
+function browserExtraArgs(text: string, url: string): string[] {
+  const index = text.indexOf(url)
+  const remainder = index >= 0 ? text.slice(index + url.length) : ""
+  const tokens = remainder.split(/\s+/).filter(Boolean)
+  const args: string[] = []
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]
+    if (BROWSER_BOOLEAN_FLAGS.has(token)) {
+      args.push(token)
+    } else if (
+      BROWSER_VALUE_FLAGS.has(token) &&
+      i + 1 < tokens.length &&
+      !tokens[i + 1].startsWith("-")
+    ) {
+      args.push(token, tokens[i + 1])
+      i += 1
+    }
+  }
+  return args
+}
+
+/**
+ * Build a live browser run. Unlike the static category wrappers this must
+ * never pass `--no-browser`, and it refuses to run without a real URL so a
+ * missing target cannot masquerade as browser coverage.
+ */
+export function browserInvocation(text: string, personasDir: string): Invocation {
+  const trimmed = (text || "").trim()
+  const url = extractUrl(trimmed)
+  if (!url) {
+    return {
+      args: [],
+      error:
+        "`/assay-browser` runs the live Playwright Operate checks and needs a reachable URL.\n\n" +
+        "Example:\n\n```\n/assay-browser http://localhost:3000\n```\n\n" +
+        "A directory target only records static scope. If Playwright or Chromium is missing, " +
+        "the browser checks are reported as `blocked` coverage gaps, never as a pass.",
+    }
+  }
+  return {
+    args: [
+      "run",
+      "--target",
+      url,
+      "--personas-dir",
+      personasDir,
+      "--intent",
+      "Assay browser assessment",
+      ...browserExtraArgs(trimmed, url),
+    ],
+  }
+}
+
+/** Build the generic `/assay` invocation from CLI-style or free-form input. */
+export function assayInvocation(text: string, personasDir: string): Invocation {
+  const trimmed = (text || "").trim()
+  const tokens = trimmed.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) {
+    return {
+      args: ["run", "--target", ".", "--no-browser", "--personas-dir", personasDir],
+    }
+  }
+  if (tokens[0] === "--version" || tokens[0] === "-v") {
+    return { args: ["--version"] }
+  }
+  if (tokens[0] === "help" || tokens[0] === "--help" || tokens[0] === "-h") {
+    return { args: ["--help"] }
+  }
+  if (SUBCOMMANDS.has(tokens[0])) {
+    return { args: tokens }
+  }
+  const url = extractUrl(trimmed)
+  if (url) {
+    return {
+      args: ["run", "--target", url, "--personas-dir", personasDir, "--intent", trimmed],
+    }
+  }
+  return {
+    args: [
+      "run",
+      "--target",
+      ".",
+      "--no-browser",
+      "--personas-dir",
+      personasDir,
+      "--intent",
+      trimmed,
+    ],
+  }
+}

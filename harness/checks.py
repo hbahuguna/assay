@@ -269,7 +269,12 @@ def _applicable(
     if definition.id == "static.functionality_category":
         return _is_functionality_category_intent(intent)
     if definition.id == "static.browser_category":
-        return _is_browser_category_intent(intent)
+        # The static scope marker exists for browser-intent runs that cannot
+        # execute a live browser. When a URL target and browser execution are
+        # both available, the real browser.* checks represent the category.
+        return _is_browser_category_intent(intent) and not (
+            target.kind == "url" and not no_browser
+        )
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))
