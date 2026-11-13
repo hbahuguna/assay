@@ -105,6 +105,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Maximum pages to crawl, including the seed page (default: 5).",
     )
+    run.add_argument(
+        "--active",
+        dest="active",
+        action="store_true",
+        help="Enable safe, non-destructive active browser probes (toggles/tabs and client-side form validation without submit).",
+    )
+    run.add_argument(
+        "--no-active",
+        dest="active",
+        action="store_false",
+        help="Disable active browser probes.",
+    )
     run.add_argument("--timeout", type=float, default=30.0, help="Navigation timeout in seconds (default: 30).")
     run.add_argument("--viewport", default="1440x900", help="Browser viewport, e.g. 1440x900.")
     run.add_argument(
