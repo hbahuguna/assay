@@ -31,6 +31,67 @@ function extractRunIds(output: string): string[] {
   return ids
 }
 
+function parseJsonOutput(output: string): any | null {
+  const trimmed = (output || "").trim()
+  if (!trimmed) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    const m = trimmed.match(/\{[\s\S]*\}/)
+    if (!m) return null
+    try {
+      return JSON.parse(m[0])
+    } catch {
+      return null
+    }
+  }
+}
+
+function summarizeRunOutput(output: string): string {
+  const report = parseJsonOutput(output)
+  if (!report || typeof report !== "object") {
+    return (output || "").slice(0, 1200)
+  }
+  const runId = report.run_id || "unknown"
+  const status = report.status || "unknown"
+  const decision = report.decision?.decision || report.decision || "n/a"
+  const score = report.confidence?.score
+  const coverage = report.confidence?.coverage
+  const lines: string[] = [`Run ${runId}: status=${status}, decision=${decision}`]
+  if (score !== undefined || coverage !== undefined) {
+    lines.push(`  confidence=${score ?? "n/a"} coverage=${coverage ?? "n/a"}`)
+  }
+  const checks = Array.isArray(report.checks) ? report.checks : []
+  if (checks.length) {
+    const counts: Record<string, number> = {}
+    for (const c of checks) {
+      const s = String(c?.status || "unknown")
+      counts[s] = (counts[s] || 0) + 1
+    }
+    lines.push(`  checks=${checks.length} (${Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(", ")})`)
+    for (const c of checks) {
+      const meta = c?.metadata || {}
+      const routes = meta.routes || meta.route || meta.crawled ? ` routes=${meta.page_count || (Array.isArray(meta.routes) ? meta.routes.length : "") || 1}` : ""
+      const ev = Array.isArray(c?.evidence) ? ` evidence=${c.evidence.length}` : ""
+      const lim = c?.skip_reason ? ` note=${String(c.skip_reason).slice(0, 120)}` : ""
+      lines.push(`  - ${c?.id || "check"}: ${c?.status || "unknown"}${routes}${ev}${lim}`)
+      if (c?.actual) lines.push(`    actual: ${String(c.actual).slice(0, 240)}`)
+    }
+  }
+  const findings = Array.isArray(report.findings) ? report.findings : []
+  if (findings.length) {
+    lines.push(`  findings=${findings.length}`)
+    for (const f of findings.slice(0, 10)) {
+      lines.push(`  - [${f?.severity || "?"}] ${f?.title || f?.id || "finding"} (${f?.check_id || "n/a"})`)
+    }
+  }
+  if (report.evidence?.directory) lines.push(`  evidence_dir=${report.evidence.directory}`)
+  if (Array.isArray(report.limitations) && report.limitations.length) {
+    lines.push(`  limitations: ${report.limitations.slice(0, 5).map((x: any) => String(x)).join(" | ")}`)
+  }
+  return lines.join("\n")
+}
+
 export function parseDecision(text: string): any | null {
   const m = text.match(/\{[\s\S]*\}/)
   if (!m) return null
@@ -74,6 +135,7 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   const minHarnessRuns = Math.max(1, Math.min(options.minHarnessRuns ?? DEFAULT_MIN_HARNESS_RUNS, maxIterations))
   const transcript: string[] = []
   const runIds: string[] = []
+  const runSummaries: string[] = []
   const log = deps.progress || ((message: string) => process.stderr.write(`[assay-agent] ${message}\n`))
 
   log(`Starting autonomous assay agent (max ${maxIterations} iterations, min ${minHarnessRuns} harness runs)`)
@@ -86,6 +148,7 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   const initialOutput = await deps.runHarness(initialArgs, options.initialEnv)
   transcript.push(`=== Initial run ===\n${initialOutput}`)
   runIds.push(...extractRunIds(initialOutput))
+  runSummaries.push(summarizeRunOutput(initialOutput))
   let currentReport = initialOutput
   let testPlan = ""
 
@@ -173,8 +236,9 @@ or
     if (decision.done) {
       log("Agent decided it is done.")
       const fixes = Array.isArray(decision.fixes) ? decision.fixes : []
-      const planMsg = testPlan ? `\n\nTest plan:\n${testPlan}` : ""
-      const finalMsg = `${decision.summary || "Assessment complete."}${planMsg}\n\nRun IDs: ${runIds.join(", ")}\n\nSuggested fixes:\n${fixes.map((f: string) => `- ${f}`).join("\n")}`
+      const planMsg = testPlan ? `\n\n## Test plan\n${testPlan}` : ""
+      const details = runSummaries.length ? `\n\n## What was executed (all runs/checks)\n${runSummaries.join("\n\n")}` : ""
+      const finalMsg = `${decision.summary || "Assessment complete."}${planMsg}${details}\n\n## Run IDs\n${runIds.join(", ")}\n\n## Suggested fixes\n${fixes.map((f: string) => `- ${f}`).join("\n") || "- (none)"}`
       await deps.sendFinal(finalMsg)
       return
     }
@@ -201,10 +265,12 @@ or
     const output = await deps.runHarness(invocation.args, browserEnvFor(invocation.args))
     transcript.push(`=== Command: ${cmd} ===\n${output}`)
     runIds.push(...extractRunIds(output).filter((id) => !runIds.includes(id)))
+    runSummaries.push(`Command: ${cmd}\n${summarizeRunOutput(output)}`)
     currentReport = output
   }
 
-  const planMsg = testPlan ? `\n\nTest plan:\n${testPlan}` : ""
-  const finalMsg = `Agent reached iteration cap (${maxIterations}). Review the transcript above.${planMsg}\n\nRun IDs: ${runIds.join(", ")}`
+  const planMsg = testPlan ? `\n\n## Test plan\n${testPlan}` : ""
+  const details = runSummaries.length ? `\n\n## What was executed (all runs/checks)\n${runSummaries.join("\n\n")}` : ""
+  const finalMsg = `Agent reached iteration cap (${maxIterations}). Review the transcript above.${planMsg}${details}\n\n## Run IDs\n${runIds.join(", ")}`
   await deps.sendFinal(finalMsg)
 }
