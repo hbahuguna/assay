@@ -1344,6 +1344,10 @@ class StaticCheckRunner:
             if any(hint in text for hint in DEMO_DOC_HINTS):
                 quickstart_docs.append(rel)
 
+        limitation = (
+            "Demo surface inventory only; no behavioral demo evidence was "
+            "collected because no URL was provided."
+        )
         payload = {
             "category": "demo",
             "intent": check.intent,
@@ -1355,6 +1359,8 @@ class StaticCheckRunner:
             "demo_directories": demo_directories,
             "demo_entrypoints": demo_entrypoints,
             "quickstart_docs": quickstart_docs[:10],
+            "behavioral_evidence": False,
+            "limitation": limitation,
         }
         evidence = self._save(
             "demo-category-scope",
@@ -1364,15 +1370,19 @@ class StaticCheckRunner:
         )
         return CheckOutcome(
             status=CheckStatus.PASSED.value,
-            actual="Demo category assessment recorded with {} demo path(s), {} entry point(s), and {} documentation reference(s).".format(
-                len(demo_paths), len(demo_entrypoints), len(quickstart_docs)
-            ),
+            actual=(
+                "Demo surface inventory recorded with {} demo path(s), {} entry "
+                "point(s), and {} documentation reference(s). No demo was "
+                "launched or rendered."
+            ).format(len(demo_paths), len(demo_entrypoints), len(quickstart_docs)),
             evidence=[evidence],
             metadata={
                 "category": "demo",
                 "demo_paths": len(demo_paths),
                 "demo_entrypoints": len(demo_entrypoints),
                 "quickstart_docs": len(quickstart_docs),
+                "behavioral_evidence": False,
+                "limitation": limitation,
             },
         )
 

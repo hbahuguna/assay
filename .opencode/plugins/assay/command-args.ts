@@ -160,6 +160,44 @@ function browserDefaults(text: string, url: string): string[] {
   return defaults
 }
 
+/**
+ * `/assay-demo` is a demo-surface inventory by default. If the operator
+ * supplies a URL, run the real browser checks against it and let those checks
+ * represent the demo category; never claim behavioral evidence without a
+ * target.
+ */
+export function demoInvocation(text: string, personasDir: string): Invocation {
+  const trimmed = (text || "").trim()
+  const url = extractUrl(trimmed)
+  if (url) {
+    return {
+      args: [
+        "run",
+        "--target",
+        url,
+        "--personas-dir",
+        personasDir,
+        "--intent",
+        "Assay demo assessment",
+        ...browserDefaults(trimmed, url),
+        ...browserExtraArgs(trimmed, url),
+      ],
+    }
+  }
+  return {
+    args: [
+      "run",
+      "--target",
+      ".",
+      "--no-browser",
+      "--personas-dir",
+      personasDir,
+      "--intent",
+      "Assay demo assessment",
+    ],
+  }
+}
+
 /** Build the generic `/assay` invocation from CLI-style or free-form input. */
 export function assayInvocation(text: string, personasDir: string): Invocation {
   const trimmed = (text || "").trim()

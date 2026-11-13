@@ -574,6 +574,14 @@ The OpenCode `/assay-browser <url>` command uses the comprehensive defaults
 server, the plugin adds a loopback-only SSRF allowlist; public URLs need no
 allowlist change.
 
+The OpenCode `/assay-demo` command is a demo-surface inventory when no URL is
+supplied. It records demo/example paths, package or Make entry points, and
+quickstart docs, and the report carries an explicit limitation that no
+behavioral demo evidence was collected. `/assay-demo <url>` instead runs the
+real browser checks against that URL and skips the redundant static demo
+marker, so rendered evidence represents the category. The OSS core never
+launches or executes target demo code.
+
 Authenticated flows can load a Playwright storage state from an explicit file or
 an environment variable:
 

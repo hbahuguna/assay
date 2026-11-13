@@ -5,8 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from harness.checks import plan_checks
 from harness.evidence import EvidenceStore
+from harness.models import Target
 from harness.orchestrator import Orchestrator, RunOptions
+from harness.personas import load_personas
 from harness.state import StateStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,11 +63,19 @@ class DemoCategoryTests(unittest.TestCase):
             self.assertGreaterEqual(check.metadata.get("demo_paths"), 1)
             self.assertGreaterEqual(check.metadata.get("demo_entrypoints"), 1)
             self.assertGreaterEqual(check.metadata.get("quickstart_docs"), 1)
+            self.assertEqual(check.metadata.get("behavioral_evidence"), False)
+            self.assertIn("no behavioral demo evidence", check.metadata.get("limitation"))
 
             report = StateStore(root).load_report()
             report_check = next(c for c in report["checks"] if c["id"] == "static.demo_category")
             self.assertEqual(report_check["status"], "passed")
             self.assertTrue(report_check["evidence"])
+            self.assertTrue(
+                any(
+                    "no behavioral demo evidence" in note
+                    for note in report["limitations"]
+                )
+            )
 
             evidence_dir = root / report["evidence"]["directory"]
             manifest = json.loads((evidence_dir / "manifest.json").read_text(encoding="utf-8"))
@@ -107,6 +118,25 @@ class DemoCategoryTests(unittest.TestCase):
             self.assertIsNotNone(
                 next((c for c in state.checks if c.id == "static.demo_category"), None)
             )
+
+    def test_demo_url_plans_browser_checks_and_skips_static_marker(self):
+        personas = load_personas(PERSONAS, require_minimum=3)
+        target = Target(
+            raw="http://localhost:3000",
+            kind="url",
+            resolved="http://localhost:3000",
+        )
+        checks = plan_checks(
+            target,
+            {"available": False},
+            personas,
+            max_checks=50,
+            no_browser=False,
+            intent="Assay demo assessment",
+        )
+        ids = {check.id for check in checks}
+        self.assertNotIn("static.demo_category", ids)
+        self.assertTrue(any(check_id.startswith("browser.") for check_id in ids))
 
     def test_non_demo_intent_does_not_plan_demo_category_check(self):
         with tempfile.TemporaryDirectory() as directory:

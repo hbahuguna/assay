@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   assayInvocation,
   browserInvocation,
+  demoInvocation,
   extractUrl,
   isUrl,
 } from "../../.opencode/plugins/assay/command-args.ts"
@@ -108,4 +109,28 @@ test("assayInvocation keeps the static default when no URL is present", () => {
 test("assayInvocation passes CLI subcommands through unchanged", () => {
   const invocation = assayInvocation("status --root .harness", PERSONAS)
   assert.deepEqual(invocation.args, ["status", "--root", ".harness"])
+})
+
+test("demoInvocation falls back to a static inventory without a URL", () => {
+  const invocation = demoInvocation("", PERSONAS)
+  assert.deepEqual(invocation.args, [
+    "run",
+    "--target",
+    ".",
+    "--no-browser",
+    "--personas-dir",
+    PERSONAS,
+    "--intent",
+    "Assay demo assessment",
+  ])
+})
+
+test("demoInvocation uses a URL for live browser checks", () => {
+  const invocation = demoInvocation("http://localhost:3000 --no-crawl --headless", PERSONAS)
+  assert.equal(invocation.args[invocation.args.indexOf("--target") + 1], "http://localhost:3000")
+  assert.equal(invocation.args.includes("--no-browser"), false)
+  assert.ok(invocation.args.includes("--no-crawl"))
+  assert.ok(invocation.args.includes("--headless"))
+  assert.equal(invocation.args.includes("--crawl"), false)
+  assert.equal(invocation.args.includes("--headed"), false)
 })

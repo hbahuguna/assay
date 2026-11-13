@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
-import { assayInvocation, browserInvocation } from "./command-args.ts"
+import { assayInvocation, browserInvocation, demoInvocation } from "./command-args.ts"
 
 const execFileAsync = promisify(execFile)
 const PYTHON = process.env.ASSAY_PYTHON || "/usr/local/bin/python3.11"
@@ -117,11 +117,14 @@ export default Plugin.define({
       })
       for (const command of assayCommands) {
         const isBrowser = command.name === "assay-browser"
+        const isDemo = command.name === "assay-demo"
         editor.add({
           name: command.name,
           description: isBrowser
             ? "Run quality-harness live browser assessment (requires a URL)"
-            : `Run quality-harness ${command.label} assessment`,
+            : isDemo
+              ? "Run quality-harness demo assessment (optional URL for live checks)"
+              : `Run quality-harness ${command.label} assessment`,
           execute: async ({ sessionID, prompt }) => {
             const projectDirectory = ctx.location.project?.canonical || ctx.location.project?.directory || ctx.location.directory || process.cwd()
             if (isBrowser) {
@@ -131,6 +134,16 @@ export default Plugin.define({
                 return
               }
               const output = await runAssay(invocation.args, projectDirectory, browserEnv())
+              await ctx.session.prompt({
+                sessionID,
+                text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              })
+              return
+            }
+            if (isDemo) {
+              const invocation = demoInvocation(prompt.text || "", PERSONAS)
+              const env = invocation.args.includes("--no-browser") ? undefined : browserEnv()
+              const output = await runAssay(invocation.args, projectDirectory, env)
               await ctx.session.prompt({
                 sessionID,
                 text: `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,

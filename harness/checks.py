@@ -308,7 +308,11 @@ def _applicable(
     if definition.id == "static.issues_category":
         return _is_issues_category_intent(intent)
     if definition.id == "static.demo_category":
-        return _is_demo_category_intent(intent)
+        # With a live URL the real browser.* checks represent the demo
+        # category; the static marker would only duplicate that coverage.
+        return _is_demo_category_intent(intent) and not (
+            target.kind == "url" and not no_browser
+        )
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))

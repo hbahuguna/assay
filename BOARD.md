@@ -1178,30 +1178,6 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
-### QH-101 - Make the /assay-demo command an explicit demo assessment
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P1
-- **Points:** 5
-- **Depends on:** QH-044
-- **Status:** Ready
-- **Description:** The `/assay-demo` command currently runs only static checks
-  plus `static.demo_category`, so a HOLD can look like a demo failure even
-  though no demo was launched, rendered, or exercised. Define and implement an
-  honest contract. Prefer keeping the static demo-surface inventory as the
-  no-URL fallback, accepting an optional http(s) URL, and planning real
-  browser checks against that URL when it is present. Never execute target demo
-  code in the OSS core.
-- **Acceptance Criteria:**
-  - `/assay-demo` without a URL records an explicit limitation that no
-    behavioral demo evidence was collected and does not imply the demo was
-    tested.
-  - `/assay-demo <url>` plans real `browser.*` checks against the URL, omits
-    `--no-browser`, and skips the redundant `static.demo_category` marker.
-  - The OpenCode wrapper, native plugin, and README describe the same contract.
-  - A regression test covers both the no-URL fallback and the URL path.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-102 - Scope CI detection to first-party workspace roots
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2549,7 +2525,47 @@ request to restore trust in the static report before continuing category work.
   call out of the unsafe findings while a first-party `os.system` call remains.
   `tests/test_static_precision.py` covers member `exec` calls, bare `exec`,
   `child_process.exec`, dummy test credentials, a real-looking value, and the
-  unchanged `innerHTML` finding. Full suite: 298 passing tests with Python 3.11.
+  unchanged `innerHTML` finding. A negation test proves `!` re-includes a
+  descendant after a directory exclusion. Full suite: 299 passing tests with
+  Python 3.11.
+
+### QH-101 - Make the /assay-demo command an explicit demo assessment
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-044
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Worked out of order at operator request because
+  `/assay-demo` ran only static checks plus `static.demo_category`, so a HOLD
+  could look like a demo failure even though no demo was launched, rendered, or
+  exercised. The command now has two explicit modes. Without a URL it records
+  the demo-surface inventory, marks `behavioral_evidence: false`, and adds the
+  limitation "Demo surface inventory only; no behavioral demo evidence was
+  collected because no URL was provided." With an http(s) URL it runs the real
+  `browser.*` checks against that URL, omits `--no-browser`, and skips the
+  redundant `static.demo_category` marker. The OpenCode native plugin and the
+  pending `assay-demo` wrapper use the same contract, and the OSS core still
+  never launches target demo code.
+- **Acceptance Criteria:**
+  - `/assay-demo` without a URL records an explicit limitation that no
+    behavioral demo evidence was collected and does not imply the demo was
+    tested.
+  - `/assay-demo <url>` plans real `browser.*` checks against the URL, omits
+    `--no-browser`, and skips the redundant `static.demo_category` marker.
+  - The OpenCode wrapper, native plugin, and README describe the same contract.
+  - A regression test covers both the no-URL fallback and the URL path.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_demo_category -v && node --test tests/plugin/command-args.test.mjs`
+- **Evidence:** `tests/test_demo_category.py` proves the no-URL report carries
+  the behavioral-evidence limitation and that a URL target plans `browser.*`
+  checks without `static.demo_category`. `tests/plugin/command-args.test.mjs`
+  proves the no-URL static fallback and the URL browser arguments. `README.md`
+  documents both modes. The `.opencode/commands/assay-demo.md` wrapper was
+  updated in the working tree but is part of the pre-existing untracked
+  `assay-carbon-*` rename set, so it was not staged in this commit.
 
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
@@ -2622,3 +2638,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D45 | 2026-11-13 | A run report exposes both sink-wide metering totals and run-scoped metering totals. `event_count`/`event_types` keep their existing sink-wide meaning; `run_event_count`/`run_event_types` filter events by the report's `run` id. | A shared sink is the billing source of truth, but a run report must be reconcilable to the run it describes. Adding fields preserves existing consumers while ending the 193-events-versus-17-events mismatch. | Split the report metering block into explicit `sink` and `run` objects only if a schema version bump is justified. |
 | D46 | 2026-11-13 | Static repository claims are git-aware: env and CI files are split into tracked and ignored/untracked sets when the target is a git work tree, and only tracked env files can produce the "present in the repository" high finding. First-party scope is declared with a target-root `.harnessignore` using gitignore-style patterns and `!` re-inclusion; excluded paths and counts are persisted in the inventory. | "Present in the repository" must mean tracked, not merely on disk. Vendored trees are often tracked, so git awareness alone cannot remove vendor noise; an explicit, auditable exclusion file keeps suppression visible and deterministic. Recording excluded paths preserves the no-silent-skip rule. | Add a `--exclude` CLI override and workspace-root manifests if multi-package repositories need more than one ignore file. |
 | D47 | 2026-11-13 | The unsafe-code rule matches bare `eval`/`exec` calls but not member calls such as `db.exec()` or `RegExp.exec()`. A separate high-severity rule detects `child_process.exec`/`execSync`. Synthetic test credentials are skipped only when the value matches a known dummy prefix or placeholder, and the skipped count is recorded in evidence. | The broad `\b(?:eval\|exec)\s*\(` pattern made 16 of 18 hits in one real repository benign. Member calls have different semantics, while bare `exec` remains a genuine arbitrary-execution surface. Value-based dummy matching removes fixture noise without suppressing a real-looking credential in a test file. | Add language-aware AST rules for Node, Python, and Go once a dependency-free parser strategy exists. |
+| D48 | 2026-11-13 | `/assay-demo` is an explicit two-mode command. Without a URL it records only a demo-surface inventory and adds a "no behavioral demo evidence" limitation. With an http(s) URL it runs the real `browser.*` checks and suppresses `static.demo_category`. The OSS core never launches or executes target demo code. | The previous command could not distinguish "demo assets exist" from "the demo works," so a static HOLD looked like a demo verdict. Requiring a URL for behavioral evidence keeps the command honest without adding a sandboxed launcher, and skipping the static marker avoids double-counting the category. | Add a sandboxed launcher or a documented demo URL convention only when a concrete fixture and isolation model exist. |
