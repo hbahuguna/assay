@@ -87,6 +87,7 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   transcript.push(`=== Initial run ===\n${initialOutput}`)
   runIds.push(...extractRunIds(initialOutput))
   let currentReport = initialOutput
+  let testPlan = ""
 
   for (let i = 1; i < maxIterations; i++) {
     log(`Iteration ${i + 1}: consulting LLM for next step...`)
@@ -95,12 +96,18 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
     let earlyFinishRejected = false
     for (let attempt = 0; attempt < 2; attempt++) {
       const mustContinue = runIds.length < minHarnessRuns
+      const needsPlan = i === 1 && !testPlan
+      const planSection = testPlan
+        ? `\nTest plan (created from source context; follow it and run the next evidence-adding step from it):\n${testPlan}\n`
+        : ""
       const decisionPrompt = `You are a strict assay judge for the quality-harness agent. Goal: ${goal}
 
 Latest harness report:
 ${currentReport}
-
+${planSection}
 Your job is to be skeptical and maximize useful coverage before finishing. Do not summarize after the first run unless there is genuinely nothing more to check.
+
+${needsPlan ? "In this iteration you MUST create a concise test plan from the source context (use goal, intent, target, and inventory/risks/checks/findings/limitations in the latest report), then choose the NEXT command to execute from that plan. The plan should identify concrete verification steps and stay aligned with the same intent/persona scope; include browser/live checks when a URL is known or relevant." : "Follow the existing test plan when present and choose the next evidence-adding command from it."}
 
 Review the latest report and decide the NEXT SINGLE harness command to run, or finish:
 - Treat failed, errored, blocked, skipped, or low-confidence/coverage-gap checks as requiring scrutiny. Blocked/skipped/errored checks are coverage gaps, never passes.
@@ -108,6 +115,7 @@ Review the latest report and decide the NEXT SINGLE harness command to run, or f
 - Do not invent evidence, do not weaken findings, and do not claim a check passed if it was blocked/skipped/errored.
 - You must complete at least ${minHarnessRuns} harness runs before finishing. Completed harness runs so far: ${runIds.length}. ${mustContinue ? "You may NOT finish yet; choose another evidence-adding command with the same intent/scope." : "Finish only when key risks are evidenced, remaining gaps are explicitly explained as uncheckable/blocked with reasons, and another allowed command would not add meaningful evidence."}
 ${earlyFinishRejected ? "- Your previous response tried to finish too early and was rejected. Return a command now." : ""}
+${needsPlan ? "- A test_plan is required now; do not return done." : ""}
 
 Allowed commands:
 - run --target <path-or-url> --no-browser --personas-dir ${personasDir} --intent "<intent>"
@@ -118,7 +126,7 @@ Allowed commands:
 - status --root <root>
 
 Output ONLY one JSON object, no markdown:
-{"command": "<full command>", "reason": "<why this adds evidence / what gap it addresses>"}
+${needsPlan ? '{"test_plan": "<concise plan from source context>", "command": "<full command from plan>", "reason": "<why this adds evidence / what gap it addresses>"}' : '{"command": "<full command>", "reason": "<why this adds evidence / what gap it addresses>"}'}
 or
 {"done": true, "summary": "<final narrative with evidence-backed assessment, gaps, and confidence>", "fixes": ["<concrete developer fix>", ...]}`
 
@@ -139,12 +147,20 @@ or
       if (!decision) {
         break
       }
+      if (typeof decision.test_plan === "string" && decision.test_plan.trim()) {
+        testPlan = decision.test_plan.trim()
+        log("Test plan created from source context.")
+        transcript.push(`=== Test plan ===\n${testPlan}`)
+      }
       if (decision.done && runIds.length < minHarnessRuns) {
         log(`Rejected early finish: ${runIds.length}/${minHarnessRuns} harness runs completed.`)
         transcript.push(`Rejected early finish at ${runIds.length}/${minHarnessRuns} harness runs.`)
         earlyFinishRejected = true
         decision = null
         continue
+      }
+      if (i === 1 && !testPlan && !decision.done) {
+        // allow command-only response, but prefer plan; do not block if LLM complied partially
       }
       break
     }
@@ -157,7 +173,8 @@ or
     if (decision.done) {
       log("Agent decided it is done.")
       const fixes = Array.isArray(decision.fixes) ? decision.fixes : []
-      const finalMsg = `${decision.summary || "Assessment complete."}\n\nRun IDs: ${runIds.join(", ")}\n\nSuggested fixes:\n${fixes.map((f: string) => `- ${f}`).join("\n")}`
+      const planMsg = testPlan ? `\n\nTest plan:\n${testPlan}` : ""
+      const finalMsg = `${decision.summary || "Assessment complete."}${planMsg}\n\nRun IDs: ${runIds.join(", ")}\n\nSuggested fixes:\n${fixes.map((f: string) => `- ${f}`).join("\n")}`
       await deps.sendFinal(finalMsg)
       return
     }
@@ -187,6 +204,7 @@ or
     currentReport = output
   }
 
-  const finalMsg = `Agent reached iteration cap (${maxIterations}). Review the transcript above.\n\nRun IDs: ${runIds.join(", ")}`
+  const planMsg = testPlan ? `\n\nTest plan:\n${testPlan}` : ""
+  const finalMsg = `Agent reached iteration cap (${maxIterations}). Review the transcript above.${planMsg}\n\nRun IDs: ${runIds.join(", ")}`
   await deps.sendFinal(finalMsg)
 }
