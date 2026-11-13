@@ -1178,9 +1178,58 @@ into a false release signal.
     changing unrelated weights.
   - `python -m unittest discover -s tests` passes.
 
+### QH-101 - Make the /assay-demo command an explicit demo assessment
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-044
+- **Status:** Ready
+- **Description:** The `/assay-demo` command currently runs only static checks
+  plus `static.demo_category`, so a HOLD can look like a demo failure even
+  though no demo was launched, rendered, or exercised. Define and implement an
+  honest contract. Prefer keeping the static demo-surface inventory as the
+  no-URL fallback, accepting an optional http(s) URL, and planning real
+  browser checks against that URL when it is present. Never execute target demo
+  code in the OSS core.
+- **Acceptance Criteria:**
+  - `/assay-demo` without a URL records an explicit limitation that no
+    behavioral demo evidence was collected and does not imply the demo was
+    tested.
+  - `/assay-demo <url>` plans real `browser.*` checks against the URL, omits
+    `--no-browser`, and skips the redundant `static.demo_category` marker.
+  - The OpenCode wrapper, native plugin, and README describe the same contract.
+  - A regression test covers both the no-URL fallback and the URL path.
+  - `python -m unittest discover -s tests` passes.
+
+### QH-102 - Scope CI detection to first-party workspace roots
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-100
+- **Status:** Ready
+- **Description:** `static.ci` still looks only at root CI files and the root
+  `.github/workflows` directory. Blind recursion would wrongly count vendored
+  workflows under `artifacts/` or `node_modules/`, so add an explicit
+  first-party workspace-root scan that respects `.harnessignore` and records
+  which roots were checked. A root-only CI file still passes; a first-party
+  package workflow can pass with evidence; excluded vendor workflows never
+  count.
+- **Acceptance Criteria:**
+  - Root CI detection behavior is unchanged.
+  - A declared first-party workspace root with `.github/workflows` or a known
+    CI file is detected and recorded in evidence.
+  - Workflows under `.harnessignore`-excluded or skipped vendor directories do
+    not count as CI.
+  - The report names the checked roots and any excluded roots.
+  - A regression test covers root, first-party nested, and vendored CI layouts.
+  - `python -m unittest discover -s tests` passes.
+
 ## In Progress
 
-No task is claimed. `QH-001` through `QH-036` are complete.
+No task is claimed. `QH-099` and `QH-100` were worked out of order at operator
+request to restore trust in the static report before continuing category work.
 
 ## Blockers
 
@@ -2424,6 +2473,84 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   proves the comprehensive defaults and explicit overrides. `README.md` documents
   the crawl and default command behavior.
 
+### QH-099 - Report run-scoped metering alongside cumulative sink totals
+
+- **Epic:** E5 Metering, Entitlements, and Billing
+- **Priority:** P1
+- **Points:** 2
+- **Depends on:** QH-019
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Worked out of order at operator request because a run report
+  in a shared sink showed the sink's lifetime event count (193 events, 6 runs, 4
+  browser minutes) next to a run that had emitted only 17 events and zero
+  browser minutes. The report now keeps the existing sink-wide
+  `event_count`/`event_types` fields for backward compatibility and adds
+  `run_event_count`/`run_event_types`, filtered by the event's `run` id. The
+  metering contract itself is unchanged; this is a report-level projection.
+- **Acceptance Criteria:**
+  - `event_count` and `event_types` remain the sink-wide totals, so existing
+    consumers do not change behavior.
+  - `run_event_count` and `run_event_types` count only events whose `run` field
+    matches the report's `run_id`.
+  - A regression test runs twice against one sink and proves the second report
+    distinguishes 17 run events from the larger cumulative total.
+  - `README.md` explains both projections and keeps metering out of commercial
+    pricing policy.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_metering -v`
+- **Evidence:** `tests/test_metering.py` verifies the first run's run-scoped
+  count equals its sink count, then verifies the second run's run-scoped count
+  and per-type map while the sink count is strictly larger. Full suite: 298
+  passing tests with Python 3.11.
+
+### QH-100 - Make static findings scope-aware and precise
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-099
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Worked out of order at operator request after a `/assay-demo`
+  run on Test-Radius produced five high findings that were scanner noise: two
+  ignored `.env` files described as "present in the repository," and three
+  `RegExp.exec`/SQLite `db.exec`/hardcoded-import matches. The inventory now
+  records whether the target is a git work tree and splits env files and CI
+  files into tracked versus ignored/untracked sets. The dependency check only
+  reports committed env files, and records ignored ones as a count. A
+  `.harnessignore` file at the target root supports gitignore-style path
+  patterns (with `!` negation) so vendored trees can be excluded from static
+  scans; excluded paths and file counts are persisted in the inventory. The
+  unsafe `eval`/`exec` rule no longer matches member calls such as
+  `db.exec()` or `RegExp.exec()`, while a separate rule still detects
+  `child_process.exec`/`execSync` and bare `exec(...)` remains high. Obvious
+  synthetic test credentials (`sk_test*`, `whsec_test*`, `test-key`,
+  placeholders) are skipped only when the value matches a known dummy shape,
+  and the count of skipped matches is recorded in evidence.
+- **Acceptance Criteria:**
+  - An ignored/untracked env file is not reported as present in the repository;
+    a tracked env file still produces the high finding.
+  - A `.harnessignore` pattern excludes matching files and directories from
+    source, secrets, unsafe, dependency, and CI inventory while recording the
+    pattern, excluded count, and sample paths.
+  - `db.exec()` and `RegExp.exec()` do not produce unsafe findings; bare
+    `exec(...)` and `child_process.exec(...)` still do.
+  - Obvious test credentials are skipped with a recorded count, while a
+    real-looking high-entropy value in non-test source is still reported.
+  - The existing `innerHTML` finding remains unchanged.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_scope_and_tracking tests.test_static_precision -v`
+- **Evidence:** `tests/test_scope_and_tracking.py` builds a temporary git repo
+  with one tracked and one ignored env file, then proves only the tracked file
+  is a finding. It also proves `.harnessignore` keeps a vendored `os.system`
+  call out of the unsafe findings while a first-party `os.system` call remains.
+  `tests/test_static_precision.py` covers member `exec` calls, bare `exec`,
+  `child_process.exec`, dummy test credentials, a real-looking value, and the
+  unchanged `innerHTML` finding. Full suite: 298 passing tests with Python 3.11.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2492,3 +2619,6 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D42 | 2026-11-13 | A comprehensive browser run is a bounded, same-origin crawl inside one deterministic check pack. The seed page is always captured; up to `--max-pages` routes are discovered from rendered links, with external hosts, non-HTTP schemes, forms, downloads, API paths, destructive actions, and known non-HTML suffixes excluded. Each route is captured separately, then each check merges route outcomes; duplicate findings are grouped and capped at ten, and a route that cannot navigate is reported by `browser.load` while other checks mark it `routes_not_evaluated`. `/assay-browser` defaults to crawl plus mobile plus a visible browser, falling back to headless if a window cannot open. | The one-page desktop run was technically real browser testing but could not find broken routes or mobile defects, which made a clean report look more complete than it was. Keeping the crawl same-origin and link-only avoids submitting data or wandering off-site, while per-route evidence preserves the no-evidence-no-finding invariant. Merging into the existing check ids avoids changing scoring weights or the report contract. | Add project-source route hints and authenticated multi-route journeys when a concrete framework or customer fixture justifies them; keep the crawl bound and SSRF-validated. |
 | D43 | 2026-11-13 | The `/assay-issues` category is represented by a `static.issues_category` scope check owned by the functional persona. It inventories TODO, FIXME, HACK, and XXX markers in scanned source, records marker counts and affected paths as evidence, and emits no finding text. The check is planned only when the run intent names the issues category, so default weights and scores are unchanged. | The category needs a deterministic, evidence-backed representation without turning every inline note into a release blocker. Counts and paths preserve operator visibility while avoiding redaction risk from marker prose. Keeping it intent-gated follows the existing category-marker pattern and leaves unrelated confidence calculations untouched. | Promote marker density to a low-severity finding or add issue-tracker ingestion only if a customer workflow requires it. |
 | D44 | 2026-11-13 | The `/assay-demo` category is represented by a `static.demo_category` scope check owned by the functional persona. It inventories demo/example/sample paths, `demo`/`start`/`dev` scripts or Make targets, and quickstart documentation references, persisting only paths and entry-point names. The check is planned only when the run intent names the demo category, so default weights and scores are unchanged. | A demo assessment should say whether a reproducible demo surface exists without reading and persisting arbitrary file contents. Path and entry-point inventory is deterministic, redaction-safe, and gives an operator a concrete place to start. Intent gating keeps unrelated confidence calculations untouched. | Add runnable-demo execution or link checking only when a sandboxed launcher and a concrete fixture justify it. |
+| D45 | 2026-11-13 | A run report exposes both sink-wide metering totals and run-scoped metering totals. `event_count`/`event_types` keep their existing sink-wide meaning; `run_event_count`/`run_event_types` filter events by the report's `run` id. | A shared sink is the billing source of truth, but a run report must be reconcilable to the run it describes. Adding fields preserves existing consumers while ending the 193-events-versus-17-events mismatch. | Split the report metering block into explicit `sink` and `run` objects only if a schema version bump is justified. |
+| D46 | 2026-11-13 | Static repository claims are git-aware: env and CI files are split into tracked and ignored/untracked sets when the target is a git work tree, and only tracked env files can produce the "present in the repository" high finding. First-party scope is declared with a target-root `.harnessignore` using gitignore-style patterns and `!` re-inclusion; excluded paths and counts are persisted in the inventory. | "Present in the repository" must mean tracked, not merely on disk. Vendored trees are often tracked, so git awareness alone cannot remove vendor noise; an explicit, auditable exclusion file keeps suppression visible and deterministic. Recording excluded paths preserves the no-silent-skip rule. | Add a `--exclude` CLI override and workspace-root manifests if multi-package repositories need more than one ignore file. |
+| D47 | 2026-11-13 | The unsafe-code rule matches bare `eval`/`exec` calls but not member calls such as `db.exec()` or `RegExp.exec()`. A separate high-severity rule detects `child_process.exec`/`execSync`. Synthetic test credentials are skipped only when the value matches a known dummy prefix or placeholder, and the skipped count is recorded in evidence. | The broad `\b(?:eval\|exec)\s*\(` pattern made 16 of 18 hits in one real repository benign. Member calls have different semantics, while bare `exec` remains a genuine arbitrary-execution surface. Value-based dummy matching removes fixture noise without suppressing a real-looking credential in a test file. | Add language-aware AST rules for Node, Python, and Go once a dependency-free parser strategy exists. |

@@ -173,6 +173,25 @@ planning fails with the offending check id. Browser plugin kinds are not
 supported yet. See `examples/plugins/README.md` and
 `examples/plugins/sample_check.py`.
 
+### Static scan scope
+
+Static checks scan the target working tree, but claims about what is "in the
+repository" are git-aware. When the target is a git work tree, env files and CI
+files are split into tracked and ignored/untracked sets; only a tracked env file
+produces the high-severity "present in the repository" finding. Ignored files
+are still counted in evidence, not silently dropped.
+
+Vendored trees can be excluded with a `.harnessignore` file at the target root.
+The syntax is gitignore-like: one pattern per line, `#` comments, directory
+prefixes such as `artifacts/`, and `!` to re-include a path. Excluded paths and
+counts are recorded in the inventory so a suppression stays auditable.
+
+The unsafe-code scan distinguishes bare `eval`/`exec` calls from member calls
+such as `db.exec()` or `RegExp.exec()`; `child_process.exec` has its own rule.
+Obvious synthetic test credentials (`sk_test*`, `whsec_test*`, `test-key`,
+placeholders) are skipped, and the skipped count is recorded in the secret-scan
+evidence. A real-looking value in a test file is still reported.
+
 ### Reproducible runs
 
 Production runs use real UTC time and UUID entropy. For deterministic reports,

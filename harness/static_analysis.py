@@ -11,7 +11,9 @@ import json
 import math
 import os
 import re
+import subprocess
 from dataclasses import dataclass, field
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -188,6 +190,13 @@ class Inventory:
     truncated: bool = False
     skipped_dirs: List[str] = field(default_factory=list)
     test_frameworks: List[str] = field(default_factory=list)
+    tracked_available: bool = False
+    tracked_file_count: int = 0
+    env_files_tracked: List[str] = field(default_factory=list)
+    env_files_ignored: List[str] = field(default_factory=list)
+    excluded_patterns: List[str] = field(default_factory=list)
+    excluded_paths: List[str] = field(default_factory=list)
+    excluded_file_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -207,6 +216,13 @@ class Inventory:
             "truncated": self.truncated,
             "skipped_dirs": self.skipped_dirs,
             "test_frameworks": self.test_frameworks,
+            "tracked_available": self.tracked_available,
+            "tracked_file_count": self.tracked_file_count,
+            "env_files_tracked": self.env_files_tracked,
+            "env_files_ignored": self.env_files_ignored,
+            "excluded_patterns": self.excluded_patterns,
+            "excluded_paths": self.excluded_paths,
+            "excluded_file_count": self.excluded_file_count,
             "has_manifest": bool(self.manifests),
             "has_markup": bool(self.markup_files),
             "has_tests": bool(self.test_files),
@@ -233,6 +249,13 @@ class Inventory:
             truncated=bool(data.get("truncated", False)),
             skipped_dirs=list(data.get("skipped_dirs", [])),
             test_frameworks=list(data.get("test_frameworks", [])),
+            tracked_available=bool(data.get("tracked_available", False)),
+            tracked_file_count=int(data.get("tracked_file_count", 0)),
+            env_files_tracked=list(data.get("env_files_tracked", [])),
+            env_files_ignored=list(data.get("env_files_ignored", [])),
+            excluded_patterns=list(data.get("excluded_patterns", [])),
+            excluded_paths=list(data.get("excluded_paths", [])),
+            excluded_file_count=int(data.get("excluded_file_count", 0)),
         )
 
 
@@ -240,23 +263,47 @@ class SourceInspector:
     def __init__(self, root: Path, max_files: int = MAX_INVENTORY_FILES) -> None:
         self.root = Path(root).resolve()
         self.max_files = max_files
+        self.exclude_patterns = self._load_exclude_patterns()
+        self.has_negations = any(
+            pattern.startswith("!") for pattern in self.exclude_patterns
+        )
 
     def discover(self) -> Inventory:
         inventory = Inventory(available=True, root=str(self.root))
+        inventory.excluded_patterns = list(self.exclude_patterns)
         if not self.root.exists() or not self.root.is_dir():
             inventory.available = False
             return inventory
+        tracked = self._git_tracked_files()
+        if tracked is not None:
+            inventory.tracked_available = True
+            inventory.tracked_file_count = len(tracked)
         count = 0
         total_bytes = 0
         for current_root, dir_names, file_names in os.walk(str(self.root), followlinks=False):
             allowed_dirs = []
             for name in sorted(dir_names):
-                if name in SKIP_DIRS or (name.startswith(".") and name not in (".github", ".circleci")):
+                rel_dir = str(Path(current_root, name).relative_to(self.root)).replace(
+                    os.sep, "/"
+                )
+                if name in SKIP_DIRS or (
+                    name.startswith(".") and name not in (".github", ".circleci")
+                ):
                     inventory.skipped_dirs.append(
                         str(Path(current_root, name).relative_to(self.root))
                     )
-                else:
-                    allowed_dirs.append(name)
+                    continue
+                if self._is_excluded(rel_dir):
+                    if (
+                        rel_dir not in inventory.excluded_paths
+                        and len(inventory.excluded_paths) < 20
+                    ):
+                        inventory.excluded_paths.append(rel_dir)
+                    # A negation may re-include a descendant, so only prune when
+                    # no negation pattern exists.
+                    if not self.has_negations:
+                        continue
+                allowed_dirs.append(name)
             dir_names[:] = allowed_dirs
             for file_name in sorted(file_names):
                 path = Path(current_root) / file_name
@@ -264,7 +311,12 @@ class SourceInspector:
                     size = path.stat().st_size
                 except OSError:
                     continue
-                rel = str(path.relative_to(self.root))
+                rel = str(path.relative_to(self.root)).replace(os.sep, "/")
+                if self._is_excluded(rel):
+                    inventory.excluded_file_count += 1
+                    if rel not in inventory.excluded_paths and len(inventory.excluded_paths) < 20:
+                        inventory.excluded_paths.append(rel)
+                    continue
                 count += 1
                 total_bytes += size
                 if count <= self.max_files:
@@ -300,6 +352,10 @@ class SourceInspector:
                 ) and ext in (CODE_EXTENSIONS | MARKUP_EXTENSIONS):
                     if rel not in inventory.test_files:
                         inventory.test_files.append(rel)
+        if tracked is not None:
+            inventory.env_files_tracked = [rel for rel in inventory.env_files if rel in tracked]
+            inventory.env_files_ignored = [rel for rel in inventory.env_files if rel not in tracked]
+            inventory.ci_files = [rel for rel in inventory.ci_files if rel in tracked]
         inventory.total_files = count
         inventory.total_bytes = total_bytes
         inventory.source_files = inventory.source_files[:5000]
@@ -309,8 +365,68 @@ class SourceInspector:
         inventory.ci_files = sorted(set(inventory.ci_files))[:100]
         inventory.lockfiles = sorted(set(inventory.lockfiles))[:100]
         inventory.env_files = sorted(set(inventory.env_files))[:50]
+        inventory.env_files_tracked = sorted(set(inventory.env_files_tracked))[:50]
+        inventory.env_files_ignored = sorted(set(inventory.env_files_ignored))[:50]
         inventory.test_frameworks = self._detect_frameworks(inventory)
         return inventory
+
+    def _load_exclude_patterns(self) -> List[str]:
+        path = self.root / ".harnessignore"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return []
+        patterns: List[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            patterns.append(stripped)
+        return patterns
+
+    def _is_excluded(self, rel: str) -> bool:
+        rel = rel.replace(os.sep, "/")
+        if rel.startswith("./"):
+            rel = rel[2:]
+        excluded = False
+        for pattern in self.exclude_patterns:
+            negate = pattern.startswith("!")
+            candidate = pattern[1:].strip() if negate else pattern
+            if not candidate:
+                continue
+            if self._pattern_matches(rel, candidate):
+                excluded = not negate
+        return excluded
+
+    @staticmethod
+    def _pattern_matches(rel: str, pattern: str) -> bool:
+        pattern = pattern.lstrip("/")
+        if pattern.endswith("/"):
+            pattern = pattern.rstrip("/")
+        if not pattern:
+            return False
+        if "/" in pattern:
+            return (
+                rel == pattern
+                or rel.startswith(pattern + "/")
+                or fnmatch(rel, pattern)
+            )
+        return any(fnmatch(part, pattern) for part in rel.split("/"))
+
+    def _git_tracked_files(self) -> Optional[set]:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self.root), "ls-files", "-z"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except OSError:
+            return None
+        if result.returncode != 0:
+            return None
+        text = result.stdout.decode("utf-8", errors="replace")
+        return {item for item in text.split("\0") if item}
 
     def _detect_frameworks(self, inventory: Inventory) -> List[str]:
         blob = ""
@@ -435,12 +551,23 @@ SECRET_RULES = [
 UNSAFE_RULES = [
     {
         "id": "eval",
-        "pattern": re.compile(r"\b(?:eval|exec)\s*\("),
+        # Do not treat member calls such as RegExp.exec(), db.exec(), or
+        # child_process.exec() as the bare Python eval/exec primitive.
+        "pattern": re.compile(r"(?<![\w.])(?:eval|exec)\s*\("),
         "severity": Severity.HIGH.value,
         "title": "Dynamic code execution primitive",
         "consequence": "Untrusted input can become arbitrary code execution.",
         "remediation": "Remove eval/exec, parse a constrained format, or isolate execution in a sandbox.",
         "verification": "Add an adversarial input test and confirm the code path rejects it.",
+    },
+    {
+        "id": "node-child-process-exec",
+        "pattern": re.compile(r"\bchild_process\.(?:exec|execSync)\s*\("),
+        "severity": Severity.HIGH.value,
+        "title": "Node child_process command execution",
+        "consequence": "Concatenated input can become arbitrary operating-system command execution.",
+        "remediation": "Use execFile/spawn with an argument array and validate every argument.",
+        "verification": "Exercise shell metacharacters and confirm they are treated as data.",
     },
     {
         "id": "shell-true",
@@ -596,6 +723,21 @@ def _entropy(value: str) -> float:
     return -sum((count / length) * math.log(count / length, 2) for count in counts.values())
 
 
+def _is_test_credential_fixture(value: str, rel: str) -> bool:
+    """Return true for obvious synthetic credentials in test paths.
+
+    This is deliberately value-based: a real-looking credential in a test file
+    is still reported. Only known dummy prefixes are skipped.
+    """
+
+    if not _is_test_path(rel):
+        return False
+    lower = value.lower()
+    return lower.startswith(
+        ("sk_test", "pk_test", "whsec_test", "test-", "test_", "dummy-", "dummy_")
+    )
+
+
 def _looks_placeholder(value: str) -> bool:
     lower = value.lower()
     placeholders = (
@@ -617,6 +759,14 @@ def _looks_placeholder(value: str) -> bool:
         "<",
         ">",
         "redacted",
+        "sk_test",
+        "pk_test",
+        "whsec_test",
+        "test-key",
+        "test_key",
+        "opencode-test",
+        "fake",
+        "mock",
     )
     return any(token in lower for token in placeholders)
 
@@ -794,6 +944,7 @@ class StaticCheckRunner:
 
     def check_static_secrets(self, check: Check) -> CheckOutcome:
         matches: List[Dict[str, Any]] = []
+        ignored_fixtures = 0
         for rel, path in self._iter_files():
             text = self._read(path)
             if not text:
@@ -805,7 +956,12 @@ class StaticCheckRunner:
                         continue
                     if rule["id"] == "generic-credential":
                         value = match.group(2)
-                        if _looks_placeholder(value) or _entropy(value) < 2.5:
+                        if (
+                            _looks_placeholder(value)
+                            or _is_test_credential_fixture(value, rel)
+                            or _entropy(value) < 2.5
+                        ):
+                            ignored_fixtures += 1
                             continue
                         redacted = redact(value)
                     elif rule["id"] == "private-key":
@@ -829,7 +985,11 @@ class StaticCheckRunner:
                 break
         evidence = self._save(
             "secret-scan",
-            {"matches": matches, "note": "Values are redacted; length and prefix only."},
+            {
+                "matches": matches,
+                "ignored_placeholder_or_test_fixture_matches": ignored_fixtures,
+                "note": "Values are redacted; length and prefix only.",
+            },
             check,
             "Redacted secret scan results.",
         )
@@ -837,7 +997,10 @@ class StaticCheckRunner:
             status=CheckStatus.PASSED.value,
             actual="No credential-like values found in scanned source.",
             evidence=[evidence],
-            metadata={"matches": len(matches)},
+            metadata={
+                "matches": len(matches),
+                "ignored_placeholder_or_test_fixture_matches": ignored_fixtures,
+            },
         )
         if not matches:
             return outcome
@@ -936,10 +1099,18 @@ class StaticCheckRunner:
         return outcome
 
     def check_static_dependencies(self, check: Check) -> CheckOutcome:
+        reported_env_files = (
+            self.inventory.env_files_tracked
+            if self.inventory.tracked_available
+            else self.inventory.env_files
+        )
         payload = {
             "manifests": self.inventory.manifests,
             "lockfiles": self.inventory.lockfiles,
             "env_files": self.inventory.env_files,
+            "env_files_tracked": self.inventory.env_files_tracked,
+            "env_files_ignored": self.inventory.env_files_ignored,
+            "tracked_available": self.inventory.tracked_available,
         }
         evidence = self._save(
             "dependency-and-env-inventory",
@@ -947,28 +1118,37 @@ class StaticCheckRunner:
             check,
             "Dependency lockfile and committed environment-file inventory.",
         )
+        actual = "Manifests: {}; lockfiles: {}; committed env files: {}".format(
+            len(self.inventory.manifests),
+            len(self.inventory.lockfiles),
+            len(reported_env_files),
+        )
+        if self.inventory.tracked_available and self.inventory.env_files_ignored:
+            actual += "; {} ignored/untracked env file(s) excluded from the committed claim".format(
+                len(self.inventory.env_files_ignored)
+            )
         outcome = CheckOutcome(
             status=CheckStatus.PASSED.value,
-            actual="Manifests: {}; lockfiles: {}; committed env files: {}".format(
-                len(self.inventory.manifests),
-                len(self.inventory.lockfiles),
-                len(self.inventory.env_files),
-            ),
+            actual=actual,
             evidence=[evidence],
+            metadata={
+                "env_files_tracked": len(self.inventory.env_files_tracked),
+                "env_files_ignored": len(self.inventory.env_files_ignored),
+                "tracked_available": self.inventory.tracked_available,
+            },
         )
-        if self.inventory.env_files:
-            for rel in self.inventory.env_files[:3]:
-                outcome.add_finding(
-                    title="Local environment file is present in the repository",
-                    severity=Severity.HIGH.value,
-                    domain="data_integrity",
-                    consequence="The file may contain live credentials, customer endpoints, or machine-specific settings.",
-                    location=rel,
-                    reproduction="Inspect the file's tracked status and confirm whether it contains secrets.",
-                    remediation="Remove the file from tracking, rotate any exposed values, and ship a .env.example instead.",
-                    verification="Confirm .gitignore covers local env files and the value is revoked.",
-                    tags=["secrets", "configuration"],
-                )
+        for rel in reported_env_files[:3]:
+            outcome.add_finding(
+                title="Local environment file is present in the repository",
+                severity=Severity.HIGH.value,
+                domain="data_integrity",
+                consequence="The file may contain live credentials, customer endpoints, or machine-specific settings.",
+                location=rel,
+                reproduction="Inspect the file's tracked status and confirm whether it contains secrets.",
+                remediation="Remove the file from tracking, rotate any exposed values, and ship a .env.example instead.",
+                verification="Confirm .gitignore covers local env files and the value is revoked.",
+                tags=["secrets", "configuration"],
+            )
         if self.inventory.manifests and not self.inventory.lockfiles:
             outcome.add_finding(
                 title="Package manifests exist without a lockfile",
