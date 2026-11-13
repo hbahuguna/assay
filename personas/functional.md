@@ -22,6 +22,7 @@ checks:
   - static.test_category
   - static.functionality_category
   - static.browser_category
+  - static.issues_category
   - static.inventory
   - static.tests
   - static.ci

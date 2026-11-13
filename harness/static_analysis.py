@@ -145,6 +145,10 @@ ENV_NAMES = {".env", ".env.local", ".env.production", ".env.staging", ".env.deve
 
 TEST_HINTS = ("test", "spec", "__tests__", "tests", "e2e", "fixture")
 
+# Issue markers are inventoried for the /assay-issues category. Counts only are
+# persisted, so an inline note cannot leak a credential into evidence.
+ISSUE_MARKER_PATTERN = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")
+
 MAX_SCAN_BYTES = 512 * 1024
 MAX_SCAN_FILES = 2000
 MAX_INVENTORY_FILES = 5000
@@ -1064,6 +1068,51 @@ class StaticCheckRunner:
             ),
             evidence=[evidence],
             metadata={"category": "browser"},
+        )
+
+    def check_static_issues_category(self, check: Check) -> CheckOutcome:
+        marker_counts: Dict[str, int] = {}
+        marker_files: List[str] = []
+        for rel, path in self._iter_files(CODE_EXTENSIONS):
+            text = self._read(path)
+            if not text:
+                continue
+            matches = ISSUE_MARKER_PATTERN.findall(text)
+            if not matches:
+                continue
+            marker_files.append(rel)
+            for marker in matches:
+                key = marker.upper()
+                marker_counts[key] = marker_counts.get(key, 0) + 1
+        payload = {
+            "category": "issues",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "test_files": len(self.inventory.test_files),
+            "manifests": len(self.inventory.manifests),
+            "issue_markers": marker_counts,
+            "files_with_issue_markers": marker_files[:20],
+        }
+        evidence = self._save(
+            "issues-category-scope",
+            payload,
+            check,
+            "Issues category assessment scope and issue-marker inventory summary.",
+        )
+        marker_total = sum(marker_counts.values())
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual="Issues category assessment recorded with {} issue marker(s) in {} file(s).".format(
+                marker_total, len(marker_files)
+            ),
+            evidence=[evidence],
+            metadata={
+                "category": "issues",
+                "issue_markers": marker_total,
+                "files_with_issue_markers": len(marker_files),
+            },
         )
 
     def check_static_accessibility(self, check: Check) -> CheckOutcome:

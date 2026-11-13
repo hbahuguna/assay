@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-043 - Add harness support for the /assay-issues test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/assay-issues`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-044 - Add harness support for the /assay-demo test category
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2326,6 +2306,35 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   planning, execution, report inclusion, hashed manifest linkage, and absence
   for non-browser intents. Full suite: 277 passing tests with Python 3.11.
 
+### QH-043 - Add harness support for the /assay-issues test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Added `static.issues_category`, owned by the functional
+  persona, to represent the `/assay-issues` category when an intent explicitly
+  requests an issues assessment. The check inventories TODO, FIXME, HACK, and
+  XXX markers in scanned source and records counts plus affected file paths as
+  hashed scope evidence. It stores no marker text, so an inline note cannot leak
+  a credential into evidence. It runs only for issues-category intents, so
+  unrelated runs and weights are unchanged.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_issues_category -v`
+- **Evidence:** `tests/test_issues_category.py` verifies issues-intent planning,
+  execution, marker inventory evidence, hashed manifest linkage, the alternate
+  category phrase, and absence for non-issues intents. Full suite: 289 passing
+  tests with Python 3.11.
+
 ### QH-097 - Make /assay-browser run live browser checks instead of a static scan
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2471,3 +2480,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D40 | 2026-11-12 | The `/jay` manager category is represented by `/assay help`, which prints the harness CLI contract. The existing `/assay` command remains the primary risk-based entry point, so no separate scoring or execution path is needed. | A manager entry point should expose available commands and options without duplicating run logic. Keeping it as help preserves the deterministic CLI contract and avoids a parallel command implementation. | Add richer interactive guidance only if the harness gains a conversational layer beyond the CLI. |
 | D41 | 2026-11-13 | `/assay-browser` is a live-browser command, not a static category alias. It requires an explicit http(s) URL, passes the URL as `--target`, and never injects `--no-browser`. The OpenCode plugin adds a loopback-only SSRF allowlist (`127.0.0.0/8`, `::1`, `localhost`) for that invocation unless the operator already set one; private and metadata networks remain blocked. A missing URL returns actionable guidance instead of running. | The previous wrapper combined a browser intent with `--no-browser` and a directory target, which could only produce `static.browser_category`. Requiring a URL keeps the command honest, while the loopback allowlist makes local dev servers usable without weakening the default SSRF posture for arbitrary hosts. | Revisit the loopback default if browser runs move to isolated cloud workers where localhost has different meaning. |
 | D42 | 2026-11-13 | A comprehensive browser run is a bounded, same-origin crawl inside one deterministic check pack. The seed page is always captured; up to `--max-pages` routes are discovered from rendered links, with external hosts, non-HTTP schemes, forms, downloads, API paths, destructive actions, and known non-HTML suffixes excluded. Each route is captured separately, then each check merges route outcomes; duplicate findings are grouped and capped at ten, and a route that cannot navigate is reported by `browser.load` while other checks mark it `routes_not_evaluated`. `/assay-browser` defaults to crawl plus mobile plus a visible browser, falling back to headless if a window cannot open. | The one-page desktop run was technically real browser testing but could not find broken routes or mobile defects, which made a clean report look more complete than it was. Keeping the crawl same-origin and link-only avoids submitting data or wandering off-site, while per-route evidence preserves the no-evidence-no-finding invariant. Merging into the existing check ids avoids changing scoring weights or the report contract. | Add project-source route hints and authenticated multi-route journeys when a concrete framework or customer fixture justifies them; keep the crawl bound and SSRF-validated. |
+| D43 | 2026-11-13 | The `/assay-issues` category is represented by a `static.issues_category` scope check owned by the functional persona. It inventories TODO, FIXME, HACK, and XXX markers in scanned source, records marker counts and affected paths as evidence, and emits no finding text. The check is planned only when the run intent names the issues category, so default weights and scores are unchanged. | The category needs a deterministic, evidence-backed representation without turning every inline note into a release blocker. Counts and paths preserve operator visibility while avoiding redaction risk from marker prose. Keeping it intent-gated follows the existing category-marker pattern and leaves unrelated confidence calculations untouched. | Promote marker density to a low-severity finding or add issue-tracker ingestion only if a customer workflow requires it. |
