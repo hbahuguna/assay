@@ -153,8 +153,9 @@ export default Plugin.define({
             }
           }
 
+          const baseGoal = raw.replace(/\[(?:context|source|method|env|secret_ref|secret-ref|id|server|mcp_server|mcp-server)\s*:[^\]]+\]/gi, "").replace(/\bskip\s+context\b/gi, "").trim() || goal
           await runAgentLoop(
-            { goal, personasDir: PERSONAS },
+            { goal: baseGoal, personasDir: PERSONAS, cwd: projectDirectory, userInput: raw, stateKey: `assay|${baseGoal}` },
             {
               runHarness: (args, env) => runAssay(args, projectDirectory, env),
               askLlm,
@@ -234,6 +235,8 @@ export default Plugin.define({
               listMcpResources,
             }
 
+            const raw = (prompt.text || "").trim()
+            const stateKeyBase = `${command.name}|${raw.replace(/\[(?:context|source|method|env|secret_ref|secret-ref|id|server|mcp_server|mcp-server)\s*:[^\]]+\]/gi, "").replace(/\bskip\s+context\b/gi, "").trim()}`
             if (isBrowser) {
               const invocation = browserInvocation(prompt.text || "", PERSONAS)
               if (invocation.error) {
@@ -246,6 +249,9 @@ export default Plugin.define({
                   personasDir: PERSONAS,
                   initialArgs: invocation.args,
                   initialEnv: browserEnv(),
+                  cwd: projectDirectory,
+                  userInput: raw,
+                  stateKey: stateKeyBase,
                 },
                 deps,
               )
@@ -260,6 +266,9 @@ export default Plugin.define({
                   personasDir: PERSONAS,
                   initialArgs: invocation.args,
                   initialEnv: env,
+                  cwd: projectDirectory,
+                  userInput: raw,
+                  stateKey: stateKeyBase,
                 },
                 deps,
               )
@@ -281,6 +290,9 @@ export default Plugin.define({
                   "--intent",
                   intent,
                 ],
+                cwd: projectDirectory,
+                userInput: raw,
+                stateKey: stateKeyBase,
               },
               deps,
             )
