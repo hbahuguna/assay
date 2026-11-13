@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from pathlib import Path
 
 from .errors import BrowserUnavailable, TargetError
@@ -154,7 +154,8 @@ JS_SNAPSHOT = r"""
     href: el.getAttribute('href') || '',
     text: text(el).slice(0, 120),
     target: el.getAttribute('target') || '',
-    rel: el.getAttribute('rel') || ''
+    rel: el.getAttribute('rel') || '',
+    download: el.hasAttribute('download')
   }));
   return {
     url: location.href,
@@ -197,6 +198,8 @@ class BrowserOptions:
     capture_trace: bool = False
     capture_video: bool = False
     storage_state: Optional[str] = None
+    crawl: bool = False
+    max_pages: int = 5
 
 
 @dataclass
@@ -206,6 +209,26 @@ class NavigationResult:
     status: Optional[int] = None
     headers: Dict[str, str] = field(default_factory=dict)
     error: str = ""
+
+
+@dataclass
+class PageView:
+    """A single captured page, used to evaluate checks across crawled routes.
+
+    The browser evaluators historically read these attributes directly from the
+    controller. Keeping the same attribute names on a per-page view lets one
+    controller capture several routes while each check remains deterministic.
+    """
+
+    options: BrowserOptions
+    navigation: NavigationResult
+    snapshot: Dict[str, Any] = field(default_factory=dict)
+    console_messages: List[Dict[str, Any]] = field(default_factory=list)
+    page_errors: List[Dict[str, Any]] = field(default_factory=list)
+    network_entries: List[Dict[str, Any]] = field(default_factory=list)
+    cookies: List[Dict[str, Any]] = field(default_factory=list)
+    evidence_refs: Dict[str, str] = field(default_factory=dict)
+    label: str = "landing"
 
 
 class BrowserController:
@@ -224,6 +247,8 @@ class BrowserController:
         self.navigation: Optional[NavigationResult] = None
         self.evidence_refs: Dict[str, str] = {}
         self.capture_notes: List[str] = []
+        self.views: List[PageView] = []
+        self.current_label: str = "landing"
         self.har_path: Optional[Path] = None
         self.trace_path: Optional[Path] = None
         self.video_dir: Optional[Path] = None
@@ -239,7 +264,20 @@ class BrowserController:
             )
         try:
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(headless=self.options.headless)
+            try:
+                self.browser = await self.playwright.chromium.launch(headless=self.options.headless)
+            except Exception as launch_error:
+                if self.options.headless:
+                    raise
+                # Interactive runs ask for a visible window, but a headless
+                # environment (CI, remote agent) must still produce evidence.
+                self.capture_notes.append(
+                    "Headed browser launch failed; fell back to headless: {}".format(
+                        redact_text(str(launch_error))
+                    )
+                )
+                self.options.headless = True
+                self.browser = await self.playwright.chromium.launch(headless=True)
             context_options: Dict[str, Any] = {
                 "viewport": {"width": self.options.viewport_width, "height": self.options.viewport_height},
                 "ignore_https_errors": False,
@@ -329,11 +367,23 @@ class BrowserController:
         except Exception:
             pass
 
-    async def navigate(self, url: str) -> NavigationResult:
+    async def navigate(self, url: str, label: Optional[str] = None) -> NavigationResult:
+        self.current_label = label or (
+            "landing" if not self.views else self._route_label(url, len(self.views) + 1)
+        )
+        # Each route is a separate page observation. Reset the event buffers so
+        # console/network evidence is attributed to the route that produced it.
+        self.console_messages = []
+        self.page_errors = []
+        self.network_entries = []
+        self.cookies = []
+        self.snapshot = {}
+        self.evidence_refs = {}
         result = NavigationResult(url=url, final_url=url)
         if self.page is None:
             result.error = "Browser page is not available."
             self.navigation = result
+            self.views.append(self._current_view())
             return result
         allowlist = load_allowlist()
         try:
@@ -341,8 +391,11 @@ class BrowserController:
         except TargetError as exc:
             result.error = str(exc)
             self.navigation = result
+            self.views.append(self._current_view())
             return result
+        before_url = url
         try:
+            before_url = self.page.url
             response = await self.page.goto(url, wait_until="load", timeout=self.options.timeout_ms)
             try:
                 await self.page.wait_for_timeout(600)
@@ -366,10 +419,144 @@ class BrowserController:
                     self.capture_notes.append("Could not read response headers: {}".format(exc))
         except Exception as exc:
             result.error = redact_text(str(exc))
-            result.final_url = self.page.url if self.page else url
+            current_url = self.page.url if self.page else url
+            # A failed download or aborted navigation can leave the page on the
+            # previous route; report the requested route instead.
+            result.final_url = current_url if current_url and current_url != before_url else url
         self.navigation = result
         await self._capture(url)
+        self.views.append(self._current_view())
         return result
+
+    def discover_routes(self, seed: str, max_pages: int) -> List[str]:
+        """Return bounded, same-origin GET routes discovered from the seed page.
+
+        Only links rendered on the seed page are followed. Forms, non-HTTP
+        schemes, external hosts, binary assets, API endpoints, and destructive
+        actions are excluded so a crawl cannot submit data or wander off-site.
+        """
+
+        limit = max(0, int(max_pages) - 1)
+        if limit <= 0 or not self.snapshot:
+            return []
+        try:
+            seed_parts = urlsplit(seed)
+        except ValueError:
+            return []
+        if seed_parts.scheme not in ("http", "https") or not seed_parts.netloc:
+            return []
+        seed_host = seed_parts.netloc.lower()
+        seen = {self._normalize_route(seed)}
+        routes: List[str] = []
+        skip_tokens = (
+            "/logout",
+            "/signout",
+            "/sign-out",
+            "/delete",
+            "/remove",
+            "/unsubscribe",
+            "/api/",
+        )
+        skip_suffixes = (
+            ".pdf",
+            ".zip",
+            ".tar",
+            ".gz",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".webp",
+            ".ico",
+            ".css",
+            ".js",
+            ".mjs",
+            ".json",
+            ".xml",
+            ".txt",
+            ".csv",
+            ".mp4",
+            ".webm",
+            ".mp3",
+            ".wav",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".otf",
+            ".pid",
+            ".log",
+            ".env",
+            ".yaml",
+            ".yml",
+            ".toml",
+            ".ini",
+            ".conf",
+            ".bak",
+            ".lock",
+            ".map",
+            ".webmanifest",
+        )
+        for item in self.snapshot.get("links", []):
+            if item.get("download"):
+                continue
+            href = str(item.get("href", "")).strip()
+            if not href or href.startswith("#"):
+                continue
+            if href.lower().startswith(("mailto:", "tel:", "javascript:", "data:", "blob:")):
+                continue
+            try:
+                absolute = urljoin(seed, href)
+                parts = urlsplit(absolute)
+            except ValueError:
+                continue
+            if parts.scheme not in ("http", "https") or parts.netloc.lower() != seed_host:
+                continue
+            path = parts.path or "/"
+            lower_path = path.lower()
+            if any(token in lower_path for token in skip_tokens):
+                continue
+            if any(lower_path.endswith(suffix) for suffix in skip_suffixes):
+                continue
+            normalized = self._normalize_route(absolute)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            routes.append(normalized)
+            if len(routes) >= limit:
+                break
+        return routes
+
+    @staticmethod
+    def _normalize_route(url: str) -> str:
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            return url
+        return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", parts.query, ""))
+
+    @staticmethod
+    def _route_label(url: str, index: int) -> str:
+        try:
+            path = urlsplit(url).path or "/"
+        except ValueError:
+            path = "/"
+        slug = re.sub(r"[^a-z0-9]+", "-", path.lower()).strip("-") or "root"
+        return "route-{}-{}".format(index, slug[:40])
+
+    def _current_view(self) -> PageView:
+        return PageView(
+            options=self.options,
+            navigation=self.navigation
+            or NavigationResult(url="", final_url=""),
+            snapshot=self.snapshot,
+            console_messages=list(self.console_messages),
+            page_errors=list(self.page_errors),
+            network_entries=list(self.network_entries),
+            cookies=list(self.cookies),
+            evidence_refs=dict(self.evidence_refs),
+            label=self.current_label,
+        )
 
     async def finalize_capture(self) -> None:
         """Persist optional HAR, trace, and video artifacts before context close."""
@@ -564,13 +751,21 @@ class BrowserController:
 
     async def _capture(self, requested_url: str) -> None:
         assert self.page is not None
+        label = self.current_label
+        is_landing = label == "landing"
         try:
-            capture_path = self.evidence.run_dir / ".capture-landing.png"
+            capture_path = self.evidence.run_dir / ".capture-{}.png".format(label)
             await self.page.screenshot(path=str(capture_path), full_page=True)
             # Register the screenshot through the store so it is hashed and manifest-backed.
             data = capture_path.read_bytes()
             self.evidence_refs["screenshot"] = self.evidence.save_screenshot(
-                "landing-page", data, description="Landing page screenshot after navigation."
+                "landing-page" if is_landing else "{}-screenshot".format(label),
+                data,
+                description=(
+                    "Landing page screenshot after navigation."
+                    if is_landing
+                    else "Screenshot for crawled route {}.".format(label)
+                ),
             )
             try:
                 capture_path.unlink()
@@ -604,34 +799,52 @@ class BrowserController:
             self.capture_notes.append("Cookie capture failed: {}".format(redact_text(str(exc))))
         if self.navigation is not None:
             self.evidence_refs["headers"] = self.evidence.save_json(
-                "response-headers",
+                "response-headers" if is_landing else "{}-response-headers".format(label),
                 {"url": sanitize_url(self.navigation.final_url), "status": self.navigation.status, "headers": self.navigation.headers},
                 kind="network_headers",
-                description="Response headers for the landing page.",
+                description=(
+                    "Response headers for the landing page."
+                    if is_landing
+                    else "Response headers for crawled route {}.".format(label)
+                ),
             )
+        console_name = "console-log" if is_landing else "{}-console-log".format(label)
         if self.console_messages or self.page_errors:
             self.evidence_refs["console"] = self.evidence.save_console_log(
-                {"messages": self.console_messages, "page_errors": self.page_errors}
+                {"messages": self.console_messages, "page_errors": self.page_errors},
+                name=console_name,
             )
         else:
             self.evidence_refs["console"] = self.evidence.save_console_log(
-                {"messages": [], "page_errors": []}
+                {"messages": [], "page_errors": []},
+                name=console_name,
             )
-        self.evidence_refs["network"] = self.evidence.save_network_log(self.network_entries)
+        self.evidence_refs["network"] = self.evidence.save_network_log(
+            self.network_entries,
+            name="network-log" if is_landing else "{}-network-log".format(label),
+        )
         self.evidence_refs["snapshot"] = self.evidence.save_json(
-            "dom-snapshot",
+            "dom-snapshot" if is_landing else "{}-dom-snapshot".format(label),
             self.snapshot,
             kind="dom_snapshot",
-            description="Sanitized DOM snapshot used by deterministic browser checks.",
+            description=(
+                "Sanitized DOM snapshot used by deterministic browser checks."
+                if is_landing
+                else "Sanitized DOM snapshot for crawled route {}.".format(label)
+            ),
         )
         self.evidence_refs["cookies"] = self.evidence.save_json(
-            "cookies",
+            "cookies" if is_landing else "{}-cookies".format(label),
             self.cookies,
             kind="cookies",
-            description="Cookie names and security flags; values are redacted.",
+            description=(
+                "Cookie names and security flags; values are redacted."
+                if is_landing
+                else "Cookie flags for crawled route {}; values are redacted.".format(label)
+            ),
         )
         self.evidence_refs["navigation"] = self.evidence.save_json(
-            "navigation",
+            "navigation" if is_landing else "{}-navigation".format(label),
             {
                 "requested_url": sanitize_url(requested_url),
                 "final_url": sanitize_url(self.navigation.final_url if self.navigation else requested_url),
@@ -640,7 +853,11 @@ class BrowserController:
                 "capture_notes": self.capture_notes,
             },
             kind="navigation",
-            description="Navigation result and capture limitations.",
+            description=(
+                "Navigation result and capture limitations."
+                if is_landing
+                else "Navigation result for crawled route {}.".format(label)
+            ),
         )
 
     async def close(self) -> None:
@@ -862,6 +1079,10 @@ class BrowserCheckRunner:
         await controller.start()
         try:
             navigation = await controller.navigate(url)
+            if self.options.crawl and not navigation.error:
+                for route in controller.discover_routes(url, self.options.max_pages):
+                    await controller.navigate(route)
+            views = list(controller.views)
             for index, check in enumerate(checks):
                 if navigation.error and check.id != "browser.load":
                     outcome = CheckOutcome(
@@ -878,7 +1099,7 @@ class BrowserCheckRunner:
                         ),
                     )
                 else:
-                    outcome = self._evaluate(check, controller, navigation)
+                    outcome = self._evaluate_routes(check, views, navigation)
                 halt = self.on_outcome(check, outcome)
                 if halt:
                     for remaining in checks[index + 1 :]:
@@ -900,7 +1121,127 @@ class BrowserCheckRunner:
                 )
             await controller.close()
 
-    def _eval_overflow(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _evaluate_routes(
+        self,
+        check: Check,
+        views: List[PageView],
+        landing_navigation: NavigationResult,
+    ) -> CheckOutcome:
+        """Evaluate one check across every captured route and merge the results."""
+
+        if not views:
+            return CheckOutcome(
+                status=CheckStatus.BLOCKED.value,
+                actual="No browser page was captured for this check.",
+                metadata={"limitation": "No browser page was captured."},
+                blocker=BlockerDraft(
+                    attempted_action=check.title,
+                    boundary="No browser page was captured.",
+                    unblock_evidence=["Restore navigation and rerun the check."],
+                ),
+            )
+        outcomes: List[CheckOutcome] = []
+        skipped: List[str] = []
+        for view in views:
+            if view.navigation.error and check.id != "browser.load":
+                skipped.append(sanitize_url(view.navigation.url))
+                continue
+            outcome = self._evaluate(check, view, view.navigation)
+            outcome.metadata.setdefault(
+                "route", sanitize_url(view.navigation.final_url or view.navigation.url)
+            )
+            outcome.metadata.setdefault("page", view.label)
+            outcomes.append(outcome)
+        if not outcomes:
+            # Every route failed to navigate; the load check owns that finding.
+            return CheckOutcome(
+                status=CheckStatus.BLOCKED.value,
+                actual="No route could be evaluated: {}".format(
+                    "; ".join(skipped[:5]) or "navigation failed"
+                ),
+                metadata={"limitation": "No route could be evaluated.", "routes_not_evaluated": skipped},
+                blocker=BlockerDraft(
+                    attempted_action=check.title,
+                    boundary="No route could be evaluated after navigation failures.",
+                    unblock_evidence=["Restore the target routes and rerun the check."],
+                ),
+            )
+        if len(outcomes) == 1:
+            outcomes[0].metadata["crawled"] = len(views) > 1
+            outcomes[0].metadata["page_count"] = 1
+            if skipped:
+                outcomes[0].metadata["routes_not_evaluated"] = skipped
+            return outcomes[0]
+        merged = self._merge_outcomes(check, outcomes)
+        if skipped:
+            merged.metadata["routes_not_evaluated"] = skipped
+        return merged
+
+    def _merge_outcomes(self, check: Check, outcomes: List[CheckOutcome]) -> CheckOutcome:
+        merged = CheckOutcome()
+        merged.metadata["crawled"] = True
+        merged.metadata["page_count"] = len(outcomes)
+        merged.metadata["routes"] = [
+            {
+                "page": outcome.metadata.get("page", ""),
+                "route": outcome.metadata.get("route", ""),
+                "status": outcome.status,
+            }
+            for outcome in outcomes
+        ]
+        findings: Dict[tuple, Any] = {}
+        truncated = False
+        for outcome in outcomes:
+            for finding in outcome.findings:
+                key = (
+                    finding.title,
+                    finding.severity,
+                    finding.domain,
+                    finding.strength,
+                    finding.consequence,
+                    finding.remediation,
+                )
+                existing = findings.get(key)
+                if existing is None:
+                    if len(merged.findings) >= 10:
+                        truncated = True
+                        continue
+                    findings[key] = finding
+                    merged.findings.append(finding)
+                else:
+                    if finding.location and finding.location not in existing.location:
+                        existing.location = (
+                            existing.location + ", " + finding.location
+                        ).strip(", ")[:800]
+                    for evidence_path in finding.evidence:
+                        if evidence_path not in existing.evidence:
+                            existing.evidence.append(evidence_path)
+            for evidence_path in outcome.evidence:
+                if evidence_path and evidence_path not in merged.evidence:
+                    merged.evidence.append(evidence_path)
+        statuses = [outcome.status for outcome in outcomes]
+        if CheckStatus.ERROR.value in statuses:
+            merged.status = CheckStatus.ERROR.value
+        elif CheckStatus.FAILED.value in statuses:
+            merged.status = CheckStatus.FAILED.value
+        elif CheckStatus.BLOCKED.value in statuses:
+            merged.status = CheckStatus.BLOCKED.value
+        elif all(status == CheckStatus.SKIPPED.value for status in statuses):
+            merged.status = CheckStatus.SKIPPED.value
+        else:
+            merged.status = CheckStatus.PASSED.value
+        summary = []
+        for outcome in outcomes:
+            page = str(outcome.metadata.get("page", "page"))
+            summary.append("{}={} ({})".format(page, outcome.status, outcome.actual))
+        merged.actual = "{} route(s): {}".format(len(outcomes), " | ".join(summary))
+        if len(merged.actual) > 2000:
+            merged.actual = merged.actual[:1997] + "..."
+        if truncated:
+            merged.metadata["findings_truncated"] = True
+        return merged
+
+    def _eval_overflow(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         snapshot = controller.snapshot
         viewport_width = int(controller.options.viewport_width)
@@ -935,7 +1276,7 @@ class BrowserCheckRunner:
             outcome.metadata["scroll_width"] = scroll_width
         return outcome
 
-    def _eval_focus_order(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_focus_order(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         snapshot = controller.snapshot
         positive = int(snapshot.get("positiveTabindex", 0) or 0)
@@ -960,12 +1301,12 @@ class BrowserCheckRunner:
         outcome.metadata["positive_tabindex_count"] = positive
         return outcome
 
-    def _common_evidence(self, controller: BrowserController) -> List[str]:
+    def _common_evidence(self, controller: PageView) -> List[str]:
         keys = ["screenshot", "headers", "console", "network", "snapshot", "cookies", "navigation"]
         return [controller.evidence_refs[key] for key in keys if controller.evidence_refs.get(key)]
 
     def _evaluate(
-        self, check: Check, controller: BrowserController, navigation: NavigationResult
+        self, check: Check, controller: PageView, navigation: NavigationResult
     ) -> CheckOutcome:
         method = getattr(self, "_eval_" + check.id.split(".", 1)[-1], None)
         if method is None:
@@ -986,7 +1327,7 @@ class BrowserCheckRunner:
                 metadata={"error": redact_text(str(exc))},
             )
 
-    def _eval_load(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_load(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         if navigation.error:
             outcome.add_finding(
@@ -1051,7 +1392,7 @@ class BrowserCheckRunner:
             outcome.status = CheckStatus.PASSED.value
         return outcome
 
-    def _eval_console(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_console(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         errors = [item for item in controller.console_messages if item.get("type") == "error"]
         errors.extend(controller.page_errors)
@@ -1076,11 +1417,15 @@ class BrowserCheckRunner:
         outcome.actual = "{} console/page error(s) observed.".format(len(errors))
         return outcome
 
-    def _eval_network(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_network(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         problems = []
         for entry in controller.network_entries:
             if entry.get("failed"):
+                # A direct route change aborts in-flight resources from the
+                # previous page. That is a crawl artifact, not a broken asset.
+                if "ERR_ABORTED" in str(entry.get("failure", "")).upper():
+                    continue
                 problems.append(entry)
             elif isinstance(entry.get("status"), int) and entry["status"] >= 400:
                 if entry["status"] == 404 and "favicon" in entry.get("url", ""):
@@ -1112,7 +1457,7 @@ class BrowserCheckRunner:
         )
         return outcome
 
-    def _eval_security(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_security(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         final_url = navigation.final_url or navigation.url
         is_https = final_url.lower().startswith("https://")
@@ -1229,7 +1574,7 @@ class BrowserCheckRunner:
                 urls.append(str(form.get("action")))
         return urls[:20]
 
-    def _eval_accessibility(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_accessibility(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         snapshot = controller.snapshot
         images = [item for item in snapshot.get("images", []) if not item.get("altPresent")]
@@ -1326,7 +1671,7 @@ class BrowserCheckRunner:
             outcome.status = CheckStatus.PASSED.value
         return outcome
 
-    def _eval_content(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_content(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         snapshot = controller.snapshot
         h1s = snapshot.get("h1s", [])
@@ -1364,7 +1709,7 @@ class BrowserCheckRunner:
             outcome.status = CheckStatus.PASSED.value
         return outcome
 
-    def _eval_links(self, controller: BrowserController, navigation: NavigationResult) -> CheckOutcome:
+    def _eval_links(self, controller: PageView, navigation: NavigationResult) -> CheckOutcome:
         outcome = CheckOutcome(evidence=self._common_evidence(controller))
         is_https = (navigation.final_url or navigation.url).lower().startswith("https://")
         links = controller.snapshot.get("links", [])

@@ -47,8 +47,35 @@ test("browserInvocation targets the URL without --no-browser", () => {
     PERSONAS,
     "--intent",
     "Assay browser assessment",
+    "--crawl",
+    "--max-pages",
+    "8",
+    "--mobile",
+    "--headed",
   ])
   assert.equal(invocation.args.includes("--no-browser"), false)
+})
+
+test("browserInvocation defaults to a comprehensive visible assessment", () => {
+  const invocation = browserInvocation("http://localhost:3000", PERSONAS)
+  assert.ok(invocation.args.includes("--crawl"))
+  assert.equal(invocation.args[invocation.args.indexOf("--max-pages") + 1], "8")
+  assert.ok(invocation.args.includes("--mobile"))
+  assert.ok(invocation.args.includes("--headed"))
+})
+
+test("browserInvocation lets explicit flags override the defaults", () => {
+  const invocation = browserInvocation(
+    "http://localhost:3000 --no-crawl --max-pages 3 --no-mobile --headless",
+    PERSONAS,
+  )
+  assert.ok(invocation.args.includes("--no-crawl"))
+  assert.equal(invocation.args[invocation.args.indexOf("--max-pages") + 1], "3")
+  assert.ok(invocation.args.includes("--no-mobile"))
+  assert.ok(invocation.args.includes("--headless"))
+  assert.equal(invocation.args.includes("--crawl"), false)
+  assert.equal(invocation.args.includes("--mobile"), false)
+  assert.equal(invocation.args.includes("--headed"), false)
 })
 
 test("browserInvocation passes safe browser flags through", () => {

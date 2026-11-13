@@ -77,6 +77,34 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-checks", type=int, default=20, help="Maximum check budget (default: 20).")
     run.add_argument("--no-browser", action="store_true", help="Skip Playwright Operate checks.")
     run.add_argument("--headed", action="store_true", help="Show the browser while running.")
+    run.add_argument(
+        "--headless",
+        action="store_true",
+        help="Force a headless browser even when a visible window was requested.",
+    )
+    run.add_argument(
+        "--comprehensive",
+        action="store_true",
+        help="Enable same-origin route crawling and the mobile check pack.",
+    )
+    run.add_argument(
+        "--crawl",
+        dest="crawl",
+        action="store_true",
+        help="Follow same-origin links and run every browser check on each discovered route.",
+    )
+    run.add_argument(
+        "--no-crawl",
+        dest="crawl",
+        action="store_false",
+        help="Disable route crawling (default for plain `run`).",
+    )
+    run.add_argument(
+        "--max-pages",
+        type=int,
+        default=5,
+        help="Maximum pages to crawl, including the seed page (default: 5).",
+    )
     run.add_argument("--timeout", type=float, default=30.0, help="Navigation timeout in seconds (default: 30).")
     run.add_argument("--viewport", default="1440x900", help="Browser viewport, e.g. 1440x900.")
     run.add_argument(
@@ -137,6 +165,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--mobile", dest="mobile", action="store_true", help="Enable the responsive/mobile Operate check pack.")
     run.add_argument("--mobile-pack", dest="mobile", action="store_true", help="Alias for --mobile.")
     run.add_argument("--responsive", dest="mobile", action="store_true", help="Alias for --mobile.")
+    run.add_argument("--no-mobile", dest="mobile", action="store_false", help="Disable the responsive/mobile Operate check pack.")
+    run.set_defaults(mobile=False, crawl=False)
     run.add_argument("--mobile-viewport", default="390x844", help="Mobile viewport for the responsive pack, e.g. 390x844.")
     run.add_argument("--browser-har", action="store_true", help="Capture a redacted HTTP Archive for browser runs.")
     run.add_argument("--browser-trace", action="store_true", help="Capture a Playwright trace for browser runs.")
@@ -568,12 +598,14 @@ def _run(args: argparse.Namespace) -> int:
         selected_personas=_csv(args.personas),
         max_checks=args.max_checks,
         no_browser=args.no_browser,
-        headless=not args.headed,
+        headless=bool(not args.headed or args.headless),
         timeout_ms=int(args.timeout * 1000),
         viewport=args.viewport,
         kill_on=args.kill_on,
-        mobile=args.mobile,
+        mobile=bool(args.mobile or args.comprehensive),
         mobile_viewport=args.mobile_viewport,
+        crawl=bool(args.crawl or args.comprehensive),
+        max_pages=args.max_pages,
         browser_har=args.browser_har,
         browser_trace=args.browser_trace,
         browser_video=args.browser_video,

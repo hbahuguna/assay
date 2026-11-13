@@ -524,6 +524,34 @@ If Playwright or Chromium cannot start, browser checks are reported as
 `blocked` with an actionable reason. They are never converted into passes, and
 the run continues with source evidence.
 
+A single page is the default, but a comprehensive run can follow same-origin
+links and evaluate every discovered route:
+
+```bash
+python -m harness run --target http://127.0.0.1:8765/ \
+  --crawl --max-pages 8 --mobile --headed \
+  --root .harness-live
+```
+
+The crawl follows only same-origin `http(s)` links rendered on the seed page.
+It skips external hosts, `mailto:`/`tel:`/`javascript:` targets, form actions,
+downloads, non-HTML assets, API paths, and destructive actions such as logout or
+delete. Each route gets its own screenshot, DOM snapshot, response headers,
+console log, network log, cookies, and navigation record in the evidence
+manifest. Browser checks merge the route results and record `crawled`,
+`page_count`, and `routes` in check metadata; duplicate findings are grouped and
+capped, and a route that fails to navigate is reported by `browser.load` while
+the remaining checks record it as not evaluated. `--comprehensive` is a shortcut
+for `--crawl --mobile`. `--headless` forces a headless browser even when
+`--headed` was requested. If a visible window cannot open, the harness falls
+back to headless and records the limitation instead of failing the run.
+
+The OpenCode `/assay-browser <url>` command uses the comprehensive defaults
+(`--crawl --max-pages 8 --mobile --headed`). Pass `--no-crawl`, `--no-mobile`,
+`--headless`, or `--max-pages N` to narrow the run. When the URL is a local dev
+server, the plugin adds a loopback-only SSRF allowlist; public URLs need no
+allowlist change.
+
 Authenticated flows can load a Playwright storage state from an explicit file or
 an environment variable:
 

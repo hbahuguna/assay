@@ -232,18 +232,22 @@ class EvidenceStore:
             suffix=suffix,
         )
 
-    def save_console_log(self, entries: List[Dict[str, Any]], check_id: str = "") -> str:
+    def save_console_log(
+        self, entries: List[Dict[str, Any]], check_id: str = "", name: str = "console-log"
+    ) -> str:
         return self.save_json(
-            "console-log",
+            name,
             entries,
             kind="console_log",
             description="Browser console messages and page errors",
             check_id=check_id,
         )
 
-    def save_network_log(self, entries: List[Dict[str, Any]], check_id: str = "") -> str:
+    def save_network_log(
+        self, entries: List[Dict[str, Any]], check_id: str = "", name: str = "network-log"
+    ) -> str:
         return self.save_json(
-            "network-log",
+            name,
             entries,
             kind="network_log",
             description="Browser network requests and responses",

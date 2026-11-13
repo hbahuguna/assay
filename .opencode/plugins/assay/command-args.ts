@@ -28,9 +28,14 @@ export const SUBCOMMANDS = new Set([
 
 const BROWSER_BOOLEAN_FLAGS = new Set([
   "--headed",
+  "--headless",
   "--mobile",
   "--mobile-pack",
   "--responsive",
+  "--no-mobile",
+  "--crawl",
+  "--no-crawl",
+  "--comprehensive",
   "--browser-har",
   "--browser-trace",
   "--browser-video",
@@ -42,6 +47,7 @@ const BROWSER_VALUE_FLAGS = new Set([
   "--timeout",
   "--kill-on",
   "--max-checks",
+  "--max-pages",
   "--fail-on",
   "--min-score",
   "--seed",
@@ -114,9 +120,44 @@ export function browserInvocation(text: string, personasDir: string): Invocation
       personasDir,
       "--intent",
       "Assay browser assessment",
+      ...browserDefaults(trimmed, url),
       ...browserExtraArgs(trimmed, url),
     ],
   }
+}
+
+/**
+ * A bare `/assay-browser <url>` should feel like a full browser assessment:
+ * open a window, crawl the same-origin surface, and include the mobile pack.
+ * Explicit user flags always win over these defaults.
+ */
+function browserDefaults(text: string, url: string): string[] {
+  const extra = browserExtraArgs(text, url)
+  const defaults: string[] = []
+  const hasCrawlChoice =
+    extra.includes("--crawl") ||
+    extra.includes("--no-crawl") ||
+    extra.includes("--comprehensive")
+  const hasMobileChoice =
+    extra.includes("--mobile") ||
+    extra.includes("--mobile-pack") ||
+    extra.includes("--responsive") ||
+    extra.includes("--no-mobile") ||
+    extra.includes("--comprehensive")
+  const hasHeadChoice = extra.includes("--headed") || extra.includes("--headless")
+  if (!hasCrawlChoice) {
+    defaults.push("--crawl")
+  }
+  if (!extra.includes("--max-pages")) {
+    defaults.push("--max-pages", "8")
+  }
+  if (!hasMobileChoice) {
+    defaults.push("--mobile")
+  }
+  if (!hasHeadChoice) {
+    defaults.push("--headed")
+  }
+  return defaults
 }
 
 /** Build the generic `/assay` invocation from CLI-style or free-form input. */

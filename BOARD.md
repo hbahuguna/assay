@@ -2363,6 +2363,48 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   `node --test`; `tests/plugin/command-args.test.mjs` covers URL extraction,
   flag pass-through, and the absence of `--no-browser`.
 
+### QH-098 - Run a comprehensive same-origin browser crawl for /assay-browser
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P1
+- **Points:** 5
+- **Depends on:** QH-097
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Worked out of order at operator request because the live
+  `/assay-browser` command still evaluated only the landing page at one desktop
+  viewport, so a healthy-looking report could miss broken routes and mobile
+  layout defects. `harness run` now supports `--crawl`, `--max-pages`, and
+  `--comprehensive`; the browser layer follows same-origin links rendered on the
+  seed page, captures per-route evidence, and evaluates every browser check on
+  each route. The OpenCode `/assay-browser` command defaults to
+  `--crawl --max-pages 8 --mobile --headed` and falls back to headless when a
+  visible window cannot open. External, destructive, download, API, and
+  non-HTML links are excluded from the crawl.
+- **Acceptance Criteria:**
+  - `/assay-browser <url>` defaults to a comprehensive visible run and explicit
+    `--no-crawl`, `--no-mobile`, `--headless`, or `--max-pages N` flags override
+    the defaults without duplicating `--target` or adding `--no-browser`.
+  - `harness run --crawl` discovers same-origin routes, skips external,
+    destructive, download, API, and non-HTML links, and runs each browser check
+    against every captured route.
+  - Every route records hashed screenshot, DOM snapshot, response headers,
+    console, network, cookies, and navigation evidence; duplicate findings are
+    grouped and capped per check.
+  - Check metadata records `crawled`, `page_count`, `routes`, and
+    `routes_not_evaluated`; a route that cannot navigate is reported by
+    `browser.load` and is not silently counted as a pass by other checks.
+  - `--max-pages 1` preserves the previous single-page behavior, and a headed
+    launch failure degrades to headless with a recorded limitation.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_browser_crawl tests.test_assay_command_contract -v`
+- **Evidence:** `tests/test_browser_crawl.py` proves route discovery, skipped
+  link classes, per-route evidence, merged metadata, 404 detection, mobile crawl
+  coverage, and the `--max-pages 1` fallback. `tests/plugin/command-args.test.mjs`
+  proves the comprehensive defaults and explicit overrides. `README.md` documents
+  the crawl and default command behavior.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2428,3 +2470,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D39 | 2026-11-12 | The assay category is represented by an OpenCode `/assay` slash command and native plugin command that run the existing risk-based workflow. This keeps the category user-facing without adding a separate execution path or changing scoring. | Reusing the deterministic orchestrator preserves phase order, evidence, redaction, and reporting. The command makes the assay entry point available in OpenCode. | Add category-specific check packs only when a concrete risk or fixture justifies them. |
 | D40 | 2026-11-12 | The `/jay` manager category is represented by `/assay help`, which prints the harness CLI contract. The existing `/assay` command remains the primary risk-based entry point, so no separate scoring or execution path is needed. | A manager entry point should expose available commands and options without duplicating run logic. Keeping it as help preserves the deterministic CLI contract and avoids a parallel command implementation. | Add richer interactive guidance only if the harness gains a conversational layer beyond the CLI. |
 | D41 | 2026-11-13 | `/assay-browser` is a live-browser command, not a static category alias. It requires an explicit http(s) URL, passes the URL as `--target`, and never injects `--no-browser`. The OpenCode plugin adds a loopback-only SSRF allowlist (`127.0.0.0/8`, `::1`, `localhost`) for that invocation unless the operator already set one; private and metadata networks remain blocked. A missing URL returns actionable guidance instead of running. | The previous wrapper combined a browser intent with `--no-browser` and a directory target, which could only produce `static.browser_category`. Requiring a URL keeps the command honest, while the loopback allowlist makes local dev servers usable without weakening the default SSRF posture for arbitrary hosts. | Revisit the loopback default if browser runs move to isolated cloud workers where localhost has different meaning. |
+| D42 | 2026-11-13 | A comprehensive browser run is a bounded, same-origin crawl inside one deterministic check pack. The seed page is always captured; up to `--max-pages` routes are discovered from rendered links, with external hosts, non-HTTP schemes, forms, downloads, API paths, destructive actions, and known non-HTML suffixes excluded. Each route is captured separately, then each check merges route outcomes; duplicate findings are grouped and capped at ten, and a route that cannot navigate is reported by `browser.load` while other checks mark it `routes_not_evaluated`. `/assay-browser` defaults to crawl plus mobile plus a visible browser, falling back to headless if a window cannot open. | The one-page desktop run was technically real browser testing but could not find broken routes or mobile defects, which made a clean report look more complete than it was. Keeping the crawl same-origin and link-only avoids submitting data or wandering off-site, while per-route evidence preserves the no-evidence-no-finding invariant. Merging into the existing check ids avoids changing scoring weights or the report contract. | Add project-source route hints and authenticated multi-route journeys when a concrete framework or customer fixture justifies them; keep the crawl bound and SSRF-validated. |

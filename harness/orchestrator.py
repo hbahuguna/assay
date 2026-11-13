@@ -148,6 +148,8 @@ class RunOptions:
     kill_on: str = "critical"
     mobile: bool = False
     mobile_viewport: str = "390x844"
+    crawl: bool = False
+    max_pages: int = 5
     browser_har: bool = False
     browser_trace: bool = False
     browser_video: bool = False
@@ -358,6 +360,10 @@ class Orchestrator:
             raise HarnessError("kill_on must be one of: critical, high, never")
         if self.options.max_checks < 1:
             raise HarnessError("max_checks must be at least 1")
+        if self.options.max_pages < 1:
+            raise HarnessError("max_pages must be at least 1")
+        if self.options.max_pages > 50:
+            raise HarnessError("max_pages must be 50 or fewer")
         try:
             width, height = self.options.viewport.lower().split("x", 1)
             if int(width) < 320 or int(height) < 240:
@@ -503,6 +509,10 @@ class Orchestrator:
                 "timeout_ms": self.options.timeout_ms,
                 "viewport": self.options.viewport,
                 "kill_on": self.options.kill_on,
+                "mobile": self.options.mobile,
+                "mobile_viewport": self.options.mobile_viewport,
+                "crawl": self.options.crawl,
+                "max_pages": self.options.max_pages,
                 "selected_personas": list(self.options.selected_personas),
                 "source": target.source,
                 "seed": self.options.seed,
@@ -862,6 +872,8 @@ class Orchestrator:
                             capture_trace=self.options.browser_trace,
                             capture_video=self.options.browser_video,
                             storage_state=self.options.storage_state,
+                            crawl=self.options.crawl,
+                            max_pages=self.options.max_pages,
                         ),
                         desktop_callback,
                     )
@@ -906,6 +918,8 @@ class Orchestrator:
                             capture_trace=self.options.browser_trace,
                             capture_video=self.options.browser_video,
                             storage_state=self.options.storage_state,
+                            crawl=self.options.crawl,
+                            max_pages=self.options.max_pages,
                         ),
                         mobile_callback,
                     )
