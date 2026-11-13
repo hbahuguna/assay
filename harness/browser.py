@@ -200,6 +200,7 @@ class BrowserOptions:
     storage_state: Optional[str] = None
     crawl: bool = False
     max_pages: int = 5
+    active: bool = False
 
 
 @dataclass
@@ -425,6 +426,8 @@ class BrowserController:
             result.final_url = current_url if current_url and current_url != before_url else url
         self.navigation = result
         await self._capture(url)
+        if self.options.active and not result.error:
+            await self._run_active_probes()
         self.views.append(self._current_view())
         return result
 
@@ -859,6 +862,197 @@ class BrowserController:
                 else "Navigation result for crawled route {}.".format(label)
             ),
         )
+
+    async def _run_active_probes(self) -> None:
+        """Run safe, non-destructive active probes and record evidence.
+
+        Probes: (1) click likely toggle/tab controls (role=switch/tab, aria-pressed/expanded
+        buttons) that are not submit/reset and not inside forms; (2) test client-side
+        form validation by filling inputs with invalid/empty values and dispatching
+        blur/input without submitting. Never clicks submit/login/payment/delete actions
+        and never navigates off-origin intentionally.
+        """
+        if self.page is None:
+            return
+        label = self.current_label
+        is_landing = label == "landing"
+        results: Dict[str, Any] = {
+            "label": label,
+            "url": sanitize_url(self.navigation.final_url if self.navigation else ""),
+            "toggles": [],
+            "validation": [],
+            "notes": [],
+        }
+        try:
+            toggle_js = r"""
+            () => {
+              const text = (el) => ((el.innerText || el.textContent || el.getAttribute('aria-label') || el.getAttribute('title') || '') + '').trim().toLowerCase();
+              const isVisible = (el) => {
+                const r = el.getBoundingClientRect();
+                const s = window.getComputedStyle(el);
+                return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+              };
+              const bad = /(submit|login|log in|sign in|sign up|register|pay|purchase|checkout|delete|remove|cancel subscription|unsubscribe|logout|sign out)/i;
+              const els = Array.from(document.querySelectorAll('button, [role="switch"], [role="tab"], [aria-pressed], [aria-expanded], input[type="checkbox"]')).filter(el => {
+                if (!isVisible(el)) return false;
+                if (el.closest('form')) return false;
+                const t = (el.getAttribute('type') || '').toLowerCase();
+                if (t === 'submit' || t === 'reset') return false;
+                const label = text(el);
+                if (bad.test(label)) return false;
+                const role = (el.getAttribute('role') || '').toLowerCase();
+                return role === 'switch' || role === 'tab' || el.hasAttribute('aria-pressed') || el.hasAttribute('aria-expanded') || /toggle|switch|monthly|yearly|annual|billing|pricing|plan/i.test(label) || /toggle|switch|monthly|yearly|annual|billing|pricing|plan/i.test((el.className||'')+ ' ' + (el.id||''));
+              }).slice(0, 5);
+              return els.map((el, i) => {
+                el.setAttribute('data-qh-probe', String(i));
+                return {
+                  selector: `[data-qh-probe="${i}"]`,
+                  text: text(el).slice(0, 120),
+                  role: el.getAttribute('role') || '',
+                  ariaPressed: el.getAttribute('aria-pressed'),
+                  ariaExpanded: el.getAttribute('aria-expanded'),
+                  checked: (el.type === 'checkbox') ? !!el.checked : null
+                };
+              });
+            }
+            """
+            candidates = await self.page.evaluate(toggle_js)
+            if isinstance(candidates, list):
+                for cand in candidates[:3]:
+                    if not isinstance(cand, dict):
+                        continue
+                    selector = str(cand.get("selector", ""))
+                    if not selector:
+                        continue
+                    before_url = self.page.url
+                    before = {k: cand.get(k) for k in ("ariaPressed", "ariaExpanded", "checked", "text", "role")}
+                    action = {"selector": selector, "before": before, "clicked": False, "changed": False, "after": {}, "note": ""}
+                    try:
+                        await self.page.click(selector, timeout=2000)
+                        action["clicked"] = True
+                        try:
+                            await self.page.wait_for_timeout(400)
+                        except Exception:
+                            pass
+                        after = await self.page.evaluate(
+                            """(sel) => {
+                              const el = document.querySelector(sel);
+                              if (!el) return null;
+                              return { ariaPressed: el.getAttribute('aria-pressed'), ariaExpanded: el.getAttribute('aria-expanded'), checked: (el.type==='checkbox')?!!el.checked:null };
+                            }""",
+                            selector,
+                        )
+                        if isinstance(after, dict):
+                            action["after"] = after
+                            action["changed"] = before.get("ariaPressed") != after.get("ariaPressed") or before.get("ariaExpanded") != after.get("ariaExpanded") or before.get("checked") != after.get("checked")
+                        if self.page.url != before_url:
+                            action["note"] = "Navigation occurred; probe stopped for safety."
+                            results["notes"].append("Toggle probe caused navigation and was treated as a stop condition.")
+                            results["toggles"].append(action)
+                            break
+                    except Exception as exc:
+                        action["note"] = "Probe failed: {}".format(redact_text(str(exc)))
+                    results["toggles"].append(action)
+        except Exception as exc:
+            results["notes"].append("Toggle probing failed: {}".format(redact_text(str(exc))))
+
+        try:
+            field_js = r"""
+            () => {
+              const isVisible = (el) => {
+                const r = el.getBoundingClientRect();
+                const s = window.getComputedStyle(el);
+                return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+              };
+              const els = Array.from(document.querySelectorAll('input, textarea, select')).filter(el => {
+                if (!isVisible(el) || el.disabled || el.readOnly) return false;
+                const type = (el.getAttribute('type') || '').toLowerCase();
+                if (['hidden','submit','button','reset','image','file','password','checkbox','radio'].includes(type)) return false;
+                return true;
+              }).slice(0, 4);
+              return els.map((el, i) => {
+                el.setAttribute('data-qh-field', String(i));
+                return { selector: `[data-qh-field="${i}"]`, type: (el.getAttribute('type')||el.tagName).toLowerCase(), required: !!el.required, name: (el.getAttribute('name')||'').slice(0,80) };
+              });
+            }
+            """
+            fields = await self.page.evaluate(field_js)
+            if isinstance(fields, list):
+                for field in fields[:3]:
+                    if not isinstance(field, dict):
+                        continue
+                    selector = str(field.get("selector", ""))
+                    if not selector:
+                        continue
+                    probe = {"selector": selector, "field": field, "invalid_probe": {}, "empty_required_probe": {}}
+                    try:
+                        # Invalid value probe (non-submitting): set obviously invalid email/url if applicable, else leave as-is
+                        invalid = await self.page.evaluate(
+                            """(sel) => {
+                              const el = document.querySelector(sel); if (!el) return null;
+                              const type = (el.getAttribute('type')||'').toLowerCase();
+                              const orig = el.value;
+                              let value = orig;
+                              if (type === 'email') value = 'invalid-email';
+                              else if (type === 'url') value = 'not-a-url';
+                              else if (type === 'number') value = 'not-a-number';
+                              else return {skipped: true, reason: 'no deterministic invalid value for type'};
+                              el.focus();
+                              el.value = value;
+                              el.dispatchEvent(new Event('input', {bubbles:true}));
+                              el.dispatchEvent(new Event('change', {bubbles:true}));
+                              el.dispatchEvent(new Event('blur', {bubbles:true}));
+                              const res = {type, value, valid: el.checkValidity ? el.checkValidity() : null, validationMessage: (el.validationMessage||'').slice(0,200), ariaInvalid: el.getAttribute('aria-invalid')};
+                              el.value = orig;
+                              el.dispatchEvent(new Event('input', {bubbles:true}));
+                              el.dispatchEvent(new Event('change', {bubbles:true}));
+                              return res;
+                            }""",
+                            selector,
+                        )
+                        probe["invalid_probe"] = invalid if isinstance(invalid, dict) else {"error": "no result"}
+                    except Exception as exc:
+                        probe["invalid_probe"] = {"error": redact_text(str(exc))}
+                    try:
+                        # Required/empty probe without submit
+                        empty = await self.page.evaluate(
+                            """(sel) => {
+                              const el = document.querySelector(sel); if (!el) return null;
+                              if (!el.required) return {skipped: true, reason: 'not required'};
+                              const orig = el.value;
+                              el.focus();
+                              el.value = '';
+                              el.dispatchEvent(new Event('input', {bubbles:true}));
+                              el.dispatchEvent(new Event('change', {bubbles:true}));
+                              el.dispatchEvent(new Event('blur', {bubbles:true}));
+                              const res = {required: true, valid: el.checkValidity ? el.checkValidity() : null, validationMessage: (el.validationMessage||'').slice(0,200), ariaInvalid: el.getAttribute('aria-invalid')};
+                              el.value = orig;
+                              el.dispatchEvent(new Event('input', {bubbles:true}));
+                              el.dispatchEvent(new Event('change', {bubbles:true}));
+                              return res;
+                            }""",
+                            selector,
+                        )
+                        probe["empty_required_probe"] = empty if isinstance(empty, dict) else {"error": "no result"}
+                    except Exception as exc:
+                        probe["empty_required_probe"] = {"error": redact_text(str(exc))}
+                    results["validation"].append(probe)
+        except Exception as exc:
+            results["notes"].append("Validation probing failed: {}".format(redact_text(str(exc))))
+
+        try:
+            self.evidence_refs["active_probes"] = self.evidence.save_json(
+                "active-probes" if is_landing else "{}-active-probes".format(label),
+                results,
+                kind="active_probes",
+                description=(
+                    "Safe non-destructive active probes (toggles/tabs and client-side validation) without form submission."
+                    if is_landing
+                    else "Safe non-destructive active probes for crawled route {}.".format(label)
+                ),
+            )
+        except Exception as exc:
+            self.capture_notes.append("Active probe evidence save failed: {}".format(redact_text(str(exc))))
 
     async def close(self) -> None:
         for closer in (self.context, self.browser):

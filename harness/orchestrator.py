@@ -150,6 +150,7 @@ class RunOptions:
     mobile_viewport: str = "390x844"
     crawl: bool = False
     max_pages: int = 5
+    active: bool = False
     browser_har: bool = False
     browser_trace: bool = False
     browser_video: bool = False
@@ -874,6 +875,7 @@ class Orchestrator:
                             storage_state=self.options.storage_state,
                             crawl=self.options.crawl,
                             max_pages=self.options.max_pages,
+                            active=self.options.active,
                         ),
                         desktop_callback,
                     )
@@ -920,6 +922,7 @@ class Orchestrator:
                             storage_state=self.options.storage_state,
                             crawl=self.options.crawl,
                             max_pages=self.options.max_pages,
+                            active=self.options.active,
                         ),
                         mobile_callback,
                     )

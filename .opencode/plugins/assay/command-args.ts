@@ -36,6 +36,8 @@ const BROWSER_BOOLEAN_FLAGS = new Set([
   "--crawl",
   "--no-crawl",
   "--comprehensive",
+  "--active",
+  "--no-active",
   "--browser-har",
   "--browser-trace",
   "--browser-video",
@@ -145,6 +147,7 @@ function browserDefaults(text: string, url: string): string[] {
     extra.includes("--no-mobile") ||
     extra.includes("--comprehensive")
   const hasHeadChoice = extra.includes("--headed") || extra.includes("--headless")
+  const hasActiveChoice = extra.includes("--active") || extra.includes("--no-active")
   if (!hasCrawlChoice) {
     defaults.push("--crawl")
   }
@@ -156,6 +159,9 @@ function browserDefaults(text: string, url: string): string[] {
   }
   if (!hasHeadChoice) {
     defaults.push("--headed")
+  }
+  if (!hasActiveChoice) {
+    defaults.push("--active")
   }
   return defaults
 }

@@ -53,6 +53,7 @@ test("browserInvocation targets the URL without --no-browser", () => {
     "8",
     "--mobile",
     "--headed",
+    "--active",
   ])
   assert.equal(invocation.args.includes("--no-browser"), false)
 })
