@@ -2595,6 +2595,29 @@ request to restore trust in the static report before continuing category work.
   raised quality from 40.3 to 61.6 without changing the remaining real findings.
   Full suite: 300 passing tests with Python 3.11.
 
+### QH-104 - Make risk analysis respect tracked environment files
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 1
+- **Depends on:** QH-100
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** After QH-100, `static.dependencies` no longer reported ignored
+  `.env` files, but the risk-analysis phase still listed "Committed environment
+  files may expose live configuration" because it read every on-disk env file.
+  Risk analysis now uses tracked env files when git metadata is available and
+  omits the risk entirely when only ignored/untracked env files are present.
+- **Acceptance Criteria:**
+  - A target with only ignored env files produces no committed-env risk.
+  - A target with a tracked env file still produces the high-priority risk.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:**
+  `PYTHONPATH=/Users/skaparwan/github/assay /usr/local/bin/python3.11 -m unittest tests.test_orchestrator_cli tests.test_blockers tests.test_demo_category -v`
+- **Evidence:** The risk logic uses `env_files_tracked` when `tracked_available`
+  is true. Targeted orchestrator, blocker, and demo tests passed after the
+  change.
+
 The Session 1 foundation is recorded here so the next agent does not rebuild it:
 
 - Deterministic five-phase orchestrator with persisted `.harness/progress.json`,
@@ -2667,3 +2690,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D46 | 2026-11-13 | Static repository claims are git-aware: env and CI files are split into tracked and ignored/untracked sets when the target is a git work tree, and only tracked env files can produce the "present in the repository" high finding. First-party scope is declared with a target-root `.harnessignore` using gitignore-style patterns and `!` re-inclusion; excluded paths and counts are persisted in the inventory. | "Present in the repository" must mean tracked, not merely on disk. Vendored trees are often tracked, so git awareness alone cannot remove vendor noise; an explicit, auditable exclusion file keeps suppression visible and deterministic. Recording excluded paths preserves the no-silent-skip rule. | Add a `--exclude` CLI override and workspace-root manifests if multi-package repositories need more than one ignore file. |
 | D47 | 2026-11-13 | The unsafe-code rule matches bare `eval`/`exec` calls but not member calls such as `db.exec()` or `RegExp.exec()`. A separate high-severity rule detects `child_process.exec`/`execSync`. Synthetic test credentials are skipped only when the value matches a known dummy prefix or placeholder, and the skipped count is recorded in evidence. | The broad `\b(?:eval\|exec)\s*\(` pattern made 16 of 18 hits in one real repository benign. Member calls have different semantics, while bare `exec` remains a genuine arbitrary-execution surface. Value-based dummy matching removes fixture noise without suppressing a real-looking credential in a test file. | Add language-aware AST rules for Node, Python, and Go once a dependency-free parser strategy exists. |
 | D48 | 2026-11-13 | `/assay-demo` is an explicit two-mode command. Without a URL it records only a demo-surface inventory and adds a "no behavioral demo evidence" limitation. With an http(s) URL it runs the real `browser.*` checks and suppresses `static.demo_category`. The OSS core never launches or executes target demo code. | The previous command could not distinguish "demo assets exist" from "the demo works," so a static HOLD looked like a demo verdict. Requiring a URL for behavioral evidence keeps the command honest without adding a sandboxed launcher, and skipping the static marker avoids double-counting the category. | Add a sandboxed launcher or a documented demo URL convention only when a concrete fixture and isolation model exist. |
+| D49 | 2026-11-13 | Risk analysis uses the same tracked-file view as static checks when git metadata is available, so ignored/untracked environment files no longer generate a high-priority risk. | Risk text and check findings must agree; otherwise the report contradicts itself and overstates repository exposure. Keeping risk analysis on the tracked set preserves the dependency check's semantics. | Revisit if risk analysis gains a separate untracked-local-secret hygiene signal. |

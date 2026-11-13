@@ -189,7 +189,11 @@ class RiskAnalyzer:
                         source="inventory",
                     )
                 )
-            if self.inventory.env_files:
+            if getattr(self.inventory, "tracked_available", False):
+                tracked_env_files = getattr(self.inventory, "env_files_tracked", [])
+            else:
+                tracked_env_files = getattr(self.inventory, "env_files", [])
+            if tracked_env_files:
                 risks.append(
                     Risk(
                         id="",
@@ -197,7 +201,7 @@ class RiskAnalyzer:
                         priority=Severity.HIGH.value,
                         domain="security",
                         consequence="Credentials or internal endpoints may be readable by anyone with repository access.",
-                        evidence=["Committed env files: {}".format(", ".join(self.inventory.env_files[:5]))],
+                        evidence=["Committed env files: {}".format(", ".join(tracked_env_files[:5]))],
                         weight_multiplier=PRIORITY_MULTIPLIER[Severity.HIGH.value],
                         source="inventory",
                     )
