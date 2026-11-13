@@ -228,6 +228,49 @@ class LocalRunMeteringTests(unittest.TestCase):
             self.assertEqual(report["metering"]["event_count"], len(events))
             self.assertEqual(report["metering"]["sink"], ".harness/metering/events.jsonl")
 
+    def test_report_distinguishes_run_events_from_cumulative_sink_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            arguments = [
+                "run",
+                "--target",
+                str(SAMPLE),
+                "--no-browser",
+                "--personas-dir",
+                str(PERSONAS),
+                "--root",
+                str(root),
+            ]
+            first_code, first_stdout, _ = run_cli(arguments)
+            self.assertEqual(first_code, 0)
+            first_report = json.loads(first_stdout)
+            events = read_events(root)
+            self.assertEqual(
+                first_report["metering"]["run_event_count"], len(events)
+            )
+            self.assertEqual(
+                first_report["metering"]["event_count"],
+                first_report["metering"]["run_event_count"],
+            )
+
+            second_code, second_stdout, _ = run_cli(arguments)
+            self.assertEqual(second_code, 0)
+            second_report = json.loads(second_stdout)
+            events = read_events(root)
+            run_events = [e for e in events if e["run"] == second_report["run_id"]]
+            self.assertTrue(run_events)
+            self.assertEqual(
+                second_report["metering"]["run_event_count"], len(run_events)
+            )
+            self.assertGreater(
+                second_report["metering"]["event_count"],
+                second_report["metering"]["run_event_count"],
+            )
+            run_types = {}
+            for event in run_events:
+                run_types[event["event_type"]] = run_types.get(event["event_type"], 0) + 1
+            self.assertEqual(second_report["metering"]["run_event_types"], run_types)
+
     def test_custom_workspace_and_sink_are_honored(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

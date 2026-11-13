@@ -252,9 +252,12 @@ normative JSON Schemas live under `schemas/metering/`: one envelope schema and
 one schema per event type. `harness.metering.validate_event` performs the same
 checks without adding a runtime dependency.
 
-A run report includes a `metering` summary with the sink, workspace, event count,
-and per-type counts. Metering events are operational usage records, not pricing
-or billing policy; the OSS core remains unlimited and account-free.
+A run report includes a `metering` summary with the sink, workspace, sink-wide
+event counts, and run-scoped event counts. `event_count`/`event_types` are the
+sink totals; `run_event_count`/`run_event_types` cover only this run, which is
+what a run-scoped report or invoice reconciliation should use. Metering events
+are operational usage records, not pricing or billing policy; the OSS core
+remains unlimited and account-free.
 
 ### Workspace authentication
 
@@ -606,8 +609,9 @@ to keep the run's evidence set unchanged.
 - `workflow`: id, name, version, and the canonical phase order that ran.
 - `confidence`: score, band, coverage, limitations, penalties, domain scores,
   formula breakdown, and gate reasons.
-- `metering`: the v1 usage-event sink, workspace, total event count, and counts
-  by event type. Events themselves live in the file sink, not the report.
+- `metering`: the v1 usage-event sink, workspace, sink-wide event count and
+  counts by type, plus run-scoped `run_event_count` and `run_event_types`.
+  Events themselves live in the file sink, not the report.
 - `findings`: severity, consequence, location, reproduction, evidence,
   remediation, verification, fingerprint, and owning persona.
 - `invalid_findings`: quarantined findings with the owning persona, check id,

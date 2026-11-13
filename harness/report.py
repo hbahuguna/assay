@@ -147,6 +147,15 @@ def build_report(
             str(key): int(value)
             for key, value in dict(metering_info.get("event_types", {})).items()
         },
+        "run_event_count": int(
+            metering_info.get("run_event_count", metering_info.get("event_count", 0))
+        ),
+        "run_event_types": {
+            str(key): int(value)
+            for key, value in dict(
+                metering_info.get("run_event_types", metering_info.get("event_types", {}))
+            ).items()
+        },
     }
     personas = []
     for persona in state.personas:

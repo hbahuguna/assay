@@ -378,12 +378,21 @@ class MeteringEmitter:
             )
 
     def summary(self) -> Dict[str, Any]:
-        """Return a deterministic summary for the run report."""
+        """Return a deterministic summary for the run report.
+
+        ``event_count`` and ``event_types`` remain the sink-wide totals for
+        backward compatibility. ``run_event_count`` and ``run_event_types``
+        isolate the events emitted by this run, which is what a run-scoped
+        report or invoice reconciliation needs in a shared sink.
+        """
 
         counts: Dict[str, int] = {}
+        run_counts: Dict[str, int] = {}
         for event in self.events():
             event_type = str(event.get("event_type", ""))
             counts[event_type] = counts.get(event_type, 0) + 1
+            if str(event.get("run", "")) == self.run_id:
+                run_counts[event_type] = run_counts.get(event_type, 0) + 1
         try:
             sink_display = str(self.sink.relative_to(self.root))
         except ValueError:
@@ -394,4 +403,6 @@ class MeteringEmitter:
             "workspace": self.workspace,
             "event_count": sum(counts.values()),
             "event_types": {key: counts[key] for key in sorted(counts)},
+            "run_event_count": sum(run_counts.values()),
+            "run_event_types": {key: run_counts[key] for key in sorted(run_counts)},
         }
