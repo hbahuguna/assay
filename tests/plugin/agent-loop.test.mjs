@@ -51,7 +51,7 @@ test("runAgentLoop stops when the LLM reports done", async () => {
     },
   }
 
-  await runAgentLoop("test goal", PERSONAS, deps)
+  await runAgentLoop({ goal: "test goal", personasDir: PERSONAS }, deps)
 
   assert.equal(calls.length, 1)
   assert.match(finalMessages.at(-1), /All good/)
@@ -80,9 +80,33 @@ test("runAgentLoop executes an allowed browser command", async () => {
     },
   }
 
-  await runAgentLoop("goal", PERSONAS, deps)
+  await runAgentLoop({ goal: "goal", personasDir: PERSONAS }, deps)
   const browserCall = calls.find((args) => args.includes("http://localhost:3000"))
   assert.ok(browserCall, "browser command should be executed")
   assert.equal(browserCall.includes("--no-browser"), false)
   assert.match(finalMessages.at(-1), /Run IDs: run-1, run-2/)
+})
+
+test("runAgentLoop respects initial invocation for demo", async () => {
+  const calls = []
+  const deps = {
+    runHarness: async (args) => {
+      calls.push(args)
+      return JSON.stringify({ run_id: "run-demo" })
+    },
+    askLlm: async () => JSON.stringify({ done: true, summary: "Demo checked", fixes: [] }),
+    sendFinal: async () => {},
+  }
+
+  await runAgentLoop(
+    {
+      goal: "Assay demo assessment",
+      personasDir: PERSONAS,
+      initialArgs: ["run", "--target", "http://localhost:3000", "--personas-dir", PERSONAS, "--intent", "Assay demo assessment"],
+    },
+    deps,
+  )
+
+  assert.equal(calls[0][calls[0].indexOf("--target") + 1], "http://localhost:3000")
+  assert.equal(calls[0].includes("--no-browser"), false)
 })

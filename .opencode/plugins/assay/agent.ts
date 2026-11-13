@@ -8,7 +8,15 @@ export interface AgentDeps {
   sendFinal: (text: string) => Promise<void>
 }
 
-const MAX_ITERATIONS = 7
+export interface AgentOptions {
+  goal: string
+  personasDir: string
+  initialArgs?: string[]
+  initialEnv?: NodeJS.ProcessEnv
+  maxIterations?: number
+}
+
+const DEFAULT_MAX_ITERATIONS = 7
 
 function extractRunIds(output: string): string[] {
   const ids: string[] = []
@@ -57,26 +65,31 @@ function browserEnvFor(args: string[]): NodeJS.ProcessEnv | undefined {
   return { ...process.env, QH_SSRF_ALLOWLIST: "127.0.0.0/8,::1,localhost" }
 }
 
-export async function runAgentLoop(goal: string, personasDir: string, deps: AgentDeps): Promise<void> {
+export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Promise<void> {
+  const { goal, personasDir } = options
+  const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS
   const transcript: string[] = []
   const runIds: string[] = []
   const log = deps.progress || ((message: string) => process.stderr.write(`[assay-agent] ${message}\n`))
 
-  log(`Starting autonomous assay agent (max ${MAX_ITERATIONS} iterations)`)
+  log(`Starting autonomous assay agent (max ${maxIterations} iterations)`)
   log(`Goal: ${goal}`)
 
   log("Iteration 1: running initial assessment...")
-  const initialArgs = ["run", "--target", ".", "--no-browser", "--personas-dir", personasDir, "--intent", goal]
-  const initialOutput = await deps.runHarness(initialArgs)
+  const initialArgs =
+    options.initialArgs ||
+    ["run", "--target", ".", "--no-browser", "--personas-dir", personasDir, "--intent", goal]
+  const initialOutput = await deps.runHarness(initialArgs, options.initialEnv)
   transcript.push(`=== Initial run ===\n${initialOutput}`)
   runIds.push(...extractRunIds(initialOutput))
   let currentReport = initialOutput
 
-  for (let i = 1; i < MAX_ITERATIONS; i++) {
+  for (let i = 1; i < maxIterations; i++) {
     log(`Iteration ${i + 1}: consulting LLM for next step...`)
 
-    const decisionPrompt = `You are the assay agent. You have the latest harness report.
+    const decisionPrompt = `You are the assay agent. Goal: ${goal}
 
+Latest harness report:
 ${currentReport}
 
 Decide the NEXT SINGLE harness command to run, or finish.
@@ -135,6 +148,7 @@ or
     const invocation = commandToArgs(cmd, personasDir)
     if (invocation.error) {
       log(invocation.error)
+      transcript.push(`Rejected: ${invocation.error}`)
       continue
     }
 
@@ -144,6 +158,6 @@ or
     currentReport = output
   }
 
-  const finalMsg = `Agent reached iteration cap (${MAX_ITERATIONS}). Review the transcript above.\n\nRun IDs: ${runIds.join(", ")}`
+  const finalMsg = `Agent reached iteration cap (${maxIterations}). Review the transcript above.\n\nRun IDs: ${runIds.join(", ")}`
   await deps.sendFinal(finalMsg)
 }

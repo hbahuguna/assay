@@ -73,7 +73,6 @@ const assayCommands = [
 ]
 
 async function sendPrompt(ctx: any, sessionID: string, text: string, noReply = false): Promise<any> {
-  // Try SDK-style client
   try {
     if (ctx.client?.session?.prompt) {
       return await ctx.client.session.prompt({
@@ -82,7 +81,6 @@ async function sendPrompt(ctx: any, sessionID: string, text: string, noReply = f
       })
     }
   } catch {}
-  // Try legacy style
   try {
     if (ctx.session?.prompt) {
       return await ctx.session.prompt({ sessionID, text, noReply })
@@ -128,14 +126,17 @@ export default Plugin.define({
             throw new Error("LLM response unavailable")
           }
 
-          await runAgentLoop(goal, PERSONAS, {
-            runHarness: (args, env) => runAssay(args, projectDirectory, env),
-            askLlm,
-            progress,
-            sendFinal: async (text) => {
-              await sendPrompt(ctx, sessionID, text, false)
+          await runAgentLoop(
+            { goal, personasDir: PERSONAS },
+            {
+              runHarness: (args, env) => runAssay(args, projectDirectory, env),
+              askLlm,
+              progress,
+              sendFinal: async (text) => {
+                await sendPrompt(ctx, sessionID, text, false)
+              },
             },
-          })
+          )
         },
       })
 
@@ -155,31 +156,68 @@ export default Plugin.define({
               ctx.location?.project?.directory ||
               ctx.location?.directory ||
               process.cwd()
+
+            const progress = (message: string) => {
+              process.stderr.write(`[assay-agent] ${message}\n`)
+              void sendPrompt(ctx, sessionID, `[assay-agent] ${message}`, true)
+            }
+            const askLlm = async (text: string): Promise<string> => {
+              try {
+                const gen = ctx.experimental?.generate?.text || ctx.generate?.text
+                if (gen) {
+                  const out = await gen({ prompt: text })
+                  if (typeof out === "string") return out
+                  if (out?.text) return out.text
+                  if (out?.content) return out.content
+                }
+              } catch {}
+              const resp = await sendPrompt(ctx, sessionID, text, false)
+              const parts = resp?.parts || resp?.data?.parts || []
+              const textOut = parts.map((p: any) => p.text || "").join("\n")
+              if (textOut) return textOut
+              throw new Error("LLM response unavailable")
+            }
+            const deps = {
+              runHarness: (args: string[], env?: NodeJS.ProcessEnv) => runAssay(args, projectDirectory, env),
+              askLlm,
+              progress,
+              sendFinal: async (text: string) => {
+                await sendPrompt(ctx, sessionID, text, false)
+              },
+            }
+
             if (isBrowser) {
               const invocation = browserInvocation(prompt.text || "", PERSONAS)
               if (invocation.error) {
                 await sendPrompt(ctx, sessionID, invocation.error)
                 return
               }
-              const output = await runAssay(invocation.args, projectDirectory, browserEnv())
-              await sendPrompt(
-                ctx,
-                sessionID,
-                `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              await runAgentLoop(
+                {
+                  goal: "Assay browser assessment",
+                  personasDir: PERSONAS,
+                  initialArgs: invocation.args,
+                  initialEnv: browserEnv(),
+                },
+                deps,
               )
               return
             }
             if (isDemo) {
               const invocation = demoInvocation(prompt.text || "", PERSONAS)
               const env = invocation.args.includes("--no-browser") ? undefined : browserEnv()
-              const output = await runAssay(invocation.args, projectDirectory, env)
-              await sendPrompt(
-                ctx,
-                sessionID,
-                `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+              await runAgentLoop(
+                {
+                  goal: "Assay demo assessment",
+                  personasDir: PERSONAS,
+                  initialArgs: invocation.args,
+                  initialEnv: env,
+                },
+                deps,
               )
               return
             }
+
             const output = await runAssay(
               [
                 "run",
