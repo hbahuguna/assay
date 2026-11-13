@@ -6,6 +6,7 @@ export interface AgentDeps {
   askLlm: (prompt: string) => Promise<string>
   progress?: (message: string) => void
   sendFinal: (text: string) => Promise<void>
+  listMcpResources?: () => Promise<string[]>
 }
 
 export interface AgentOptions {
@@ -20,6 +21,56 @@ export interface AgentOptions {
 
 const DEFAULT_MAX_ITERATIONS = 7
 const DEFAULT_MIN_HARNESS_RUNS = 3
+
+const CONTEXT_TYPES = ["jira", "slack", "github", "doc", "url", "text"] as const
+const SENSITIVE_ASSIGNMENT = /\b(authorization|cookie|token|secret|password|api[_-]?key|session)\b\s*[:=]\s*([^\s,;"']+)/gi
+const PRIVATE_KEY_BLOCK = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g
+
+function redactTranscriptText(value: string): string {
+  return String(value || "")
+    .replace(PRIVATE_KEY_BLOCK, "[REDACTED PRIVATE KEY]")
+    .replace(SENSITIVE_ASSIGNMENT, (_m, key) => `${key}=[REDACTED]`)
+}
+
+function formatNeedContext(decision: any, mcpResources: string[], goal: string): string {
+  const need = decision?.need_user_context || {}
+  const requestedType = String(need.type || "text").toLowerCase()
+  const ordered = [...CONTEXT_TYPES]
+  const type = (ordered.includes(requestedType as any) ? requestedType : "text") as string
+  const question = String(need.question || "Additional context is needed to refine the test plan.")
+  const requested = Array.isArray(need.requested) && need.requested.length
+    ? need.requested.map((x: any) => `- ${String(x)}`)
+    : ["- Relevant acceptance criteria, user flow details, or constraints"]
+  const reason = String(decision?.reason || "Current evidence is insufficient to plan precise functional verification.")
+  const mcpSection = mcpResources.length
+    ? `\n## Available MCP resources (if relevant)\n${mcpResources.map((r) => `- ${r}`).join("\n")}\n`
+    : `\n## MCP/connectors\n- No MCP resources discovered in this session. You can paste context directly, or configure a connector and rerun.\n`
+
+  return `## More context needed (same intent)
+
+**Goal/intent:** ${goal}
+**Requested context type (priority):** ${type}
+**Why:** ${reason}
+
+**Question:** ${question}
+
+## What to provide (in priority order)
+1. **Jira**: issue key/URL and acceptance criteria (or paste the story).
+2. **Slack**: thread URL or key discussion summary/decision.
+3. **GitHub**: issue/PR/discussion URL or relevant details.
+4. **Doc**: link or pasted requirements/design notes.
+5. **URL/Text**: specific page URL to test or pasted context.
+${mcpSection}
+## Suggested details
+${requested.join("\n")}
+
+## How to continue
+- Reply/rerun with the context included, e.g. \`/assay ${goal} <paste Jira AC / thread summary / doc details>\` (or run the same command with the extra context).
+- If a connector/MCP is configured, provide the exact Jira/Slack/GitHub identifier and confirm it should be used; otherwise paste the relevant content.
+- Reply with “skip context” to proceed using current evidence only (gaps will be reported explicitly).
+
+> Sensitive values should not be shared; redact tokens/secrets before providing context.`
+}
 
 function extractRunIds(output: string): string[] {
   const ids: string[] = []
@@ -45,6 +96,16 @@ function parseJsonOutput(output: string): any | null {
       return null
     }
   }
+}
+
+async function discoverMcpResources(deps: AgentDeps): Promise<string[]> {
+  try {
+    if (deps.listMcpResources) {
+      const items = await deps.listMcpResources()
+      return (items || []).map((x) => redactTranscriptText(String(x))).slice(0, 30)
+    }
+  } catch {}
+  return []
 }
 
 function summarizeRunOutput(output: string): string {
@@ -146,7 +207,7 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
     options.initialArgs ||
     ["run", "--target", ".", "--no-browser", "--personas-dir", personasDir, "--intent", goal]
   const initialOutput = await deps.runHarness(initialArgs, options.initialEnv)
-  transcript.push(`=== Initial run ===\n${initialOutput}`)
+  transcript.push(`=== Initial run ===\n${redactTranscriptText(initialOutput)}`)
   runIds.push(...extractRunIds(initialOutput))
   runSummaries.push(summarizeRunOutput(initialOutput))
   let currentReport = initialOutput
@@ -166,11 +227,11 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
       const decisionPrompt = `You are a strict assay judge for the quality-harness agent. Goal: ${goal}
 
 Latest harness report:
-${currentReport}
+${redactTranscriptText(currentReport)}
 ${planSection}
 Your job is to be skeptical and maximize useful coverage before finishing. Do not summarize after the first run unless there is genuinely nothing more to check.
 
-${needsPlan ? "In this iteration you MUST create a concise test plan from the source context (use goal, intent, target, and inventory/risks/checks/findings/limitations in the latest report), then choose the NEXT command to execute from that plan. The plan should identify concrete verification steps and stay aligned with the same intent/persona scope; include browser/live checks when a URL is known or relevant." : "Follow the existing test plan when present and choose the next evidence-adding command from it."}
+${needsPlan ? "In this iteration you MUST create a COMPREHENSIVE test plan from the source context (use goal, intent, target, and inventory/risks/checks/findings/limitations in the latest report), then choose the NEXT command to execute from that plan. The plan must go beyond page loads: identify key user journeys and functionalities to verify (navigation/routes, forms/inputs/validation, CTAs/buttons/links, auth or stateful flows if indicated, search/filters, error/empty states, accessibility/responsive/security signals) based on available evidence and source context. For live browser targets, include crawl/mobile and checks that exercise console/network/security/accessibility/content/links; explicitly note any interactive behaviors (e.g. clicking buttons, submitting forms, multi-step flows) that the deterministic harness cannot perform and how to gather evidence or context for them. Stay aligned with the same intent/persona scope." : "Follow the existing test plan when present and choose the next evidence-adding command from it."}
 
 Review the latest report and decide the NEXT SINGLE harness command to run, or finish:
 - Treat failed, errored, blocked, skipped, or low-confidence/coverage-gap checks as requiring scrutiny. Blocked/skipped/errored checks are coverage gaps, never passes.
@@ -179,6 +240,7 @@ Review the latest report and decide the NEXT SINGLE harness command to run, or f
 - You must complete at least ${minHarnessRuns} harness runs before finishing. Completed harness runs so far: ${runIds.length}. ${mustContinue ? "You may NOT finish yet; choose another evidence-adding command with the same intent/scope." : "Finish only when key risks are evidenced, remaining gaps are explicitly explained as uncheckable/blocked with reasons, and another allowed command would not add meaningful evidence."}
 ${earlyFinishRejected ? "- Your previous response tried to finish too early and was rejected. Return a command now." : ""}
 ${needsPlan ? "- A test_plan is required now; do not return done." : ""}
+- If essential context is missing (acceptance criteria, expected behavior, credentials/flows, environment details), you may request user context instead of guessing (preferred from iteration 3 onward): return need_user_context.
 
 Allowed commands:
 - run --target <path-or-url> --no-browser --personas-dir ${personasDir} --intent "<intent>"
@@ -189,7 +251,9 @@ Allowed commands:
 - status --root <root>
 
 Output ONLY one JSON object, no markdown:
-${needsPlan ? '{"test_plan": "<concise plan from source context>", "command": "<full command from plan>", "reason": "<why this adds evidence / what gap it addresses>"}' : '{"command": "<full command>", "reason": "<why this adds evidence / what gap it addresses>"}'}
+${needsPlan ? '{"test_plan": "<comprehensive plan from source context>", "command": "<full command from plan>", "reason": "<why this adds evidence / what gap it addresses>"}' : '{"command": "<full command>", "reason": "<why this adds evidence / what gap it addresses>"}'}
+or
+{"need_user_context": {"type": "jira|slack|github|doc|url|text", "question": "<what you need>", "requested": ["<specific items>"]}, "reason": "<why this context is needed>"}
 or
 {"done": true, "summary": "<final narrative with evidence-backed assessment, gaps, and confidence>", "fixes": ["<concrete developer fix>", ...]}`
 
@@ -205,15 +269,27 @@ or
         decision = null
         break
       }
-      transcript.push(`=== LLM decision (iter ${i + 1}, attempt ${attempt + 1}) ===\n${llmText}`)
+      transcript.push(`=== LLM decision (iter ${i + 1}, attempt ${attempt + 1}) ===\n${redactTranscriptText(llmText)}`)
       decision = parseDecision(llmText)
       if (!decision) {
         break
       }
       if (typeof decision.test_plan === "string" && decision.test_plan.trim()) {
         testPlan = decision.test_plan.trim()
-        log("Test plan created from source context.")
+        log("Test plan created from source context:")
+        for (const line of testPlan.split("\n")) log(`  ${line}`)
+        process.stderr.write(`\n[assay-agent] TEST PLAN\n${testPlan}\n\n`)
+        void deps.sendFinal ? null : null
         transcript.push(`=== Test plan ===\n${testPlan}`)
+      }
+      if (decision.need_user_context) {
+        const mcpResources = await discoverMcpResources(deps)
+        const requestMsg = formatNeedContext(decision, mcpResources, goal)
+        log("Additional user context requested by judge.")
+        const planMsg = testPlan ? `\n\n## Test plan so far\n${testPlan}` : ""
+        const details = runSummaries.length ? `\n\n## What was executed (all runs/checks)\n${runSummaries.join("\n\n")}` : ""
+        await deps.sendFinal(`${requestMsg}${planMsg}${details}\n\n## Run IDs\n${runIds.join(", ") || "(none)"}`)
+        return
       }
       if (decision.done && runIds.length < minHarnessRuns) {
         log(`Rejected early finish: ${runIds.length}/${minHarnessRuns} harness runs completed.`)
@@ -221,9 +297,6 @@ or
         earlyFinishRejected = true
         decision = null
         continue
-      }
-      if (i === 1 && !testPlan && !decision.done) {
-        // allow command-only response, but prefer plan; do not block if LLM complied partially
       }
       break
     }
@@ -263,7 +336,7 @@ or
     }
 
     const output = await deps.runHarness(invocation.args, browserEnvFor(invocation.args))
-    transcript.push(`=== Command: ${cmd} ===\n${output}`)
+    transcript.push(`=== Command: ${cmd} ===\n${redactTranscriptText(output)}`)
     runIds.push(...extractRunIds(output).filter((id) => !runIds.includes(id)))
     runSummaries.push(`Command: ${cmd}\n${summarizeRunOutput(output)}`)
     currentReport = output

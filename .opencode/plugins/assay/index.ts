@@ -132,6 +132,27 @@ export default Plugin.define({
             throw new Error("LLM response unavailable")
           }
 
+          const listMcpResources = async (): Promise<string[]> => {
+            try {
+              const list =
+                ctx.client?.mcp?.resources?.list ||
+                ctx.client?.mcp?.listResources ||
+                ctx.mcp?.resources?.list ||
+                ctx.mcp?.listResources
+              if (!list) return []
+              const out = await list({})
+              const resources = out?.resources || out?.data?.resources || []
+              const templates = out?.resourceTemplates || out?.templates || out?.data?.resourceTemplates || []
+              const names = [
+                ...resources.map((r: any) => `resource: ${r?.server || "?"}/${r?.name || r?.uri || "?"}`),
+                ...templates.map((r: any) => `template: ${r?.server || "?"}/${r?.name || r?.uriTemplate || "?"}`),
+              ]
+              return names
+            } catch {
+              return []
+            }
+          }
+
           await runAgentLoop(
             { goal, personasDir: PERSONAS },
             {
@@ -141,6 +162,7 @@ export default Plugin.define({
               sendFinal: async (text) => {
                 await sendPrompt(ctx, sessionID, text, false)
               },
+              listMcpResources,
             },
           )
         },
@@ -183,6 +205,25 @@ export default Plugin.define({
               if (textOut) return textOut
               throw new Error("LLM response unavailable")
             }
+            const listMcpResources = async (): Promise<string[]> => {
+              try {
+                const list =
+                  ctx.client?.mcp?.resources?.list ||
+                  ctx.client?.mcp?.listResources ||
+                  ctx.mcp?.resources?.list ||
+                  ctx.mcp?.listResources
+                if (!list) return []
+                const out = await list({})
+                const resources = out?.resources || out?.data?.resources || []
+                const templates = out?.resourceTemplates || out?.templates || out?.data?.resourceTemplates || []
+                return [
+                  ...resources.map((r: any) => `resource: ${r?.server || "?"}/${r?.name || r?.uri || "?"}`),
+                  ...templates.map((r: any) => `template: ${r?.server || "?"}/${r?.name || r?.uriTemplate || "?"}`),
+                ]
+              } catch {
+                return []
+              }
+            }
             const deps = {
               runHarness: (args: string[], env?: NodeJS.ProcessEnv) => runAssay(args, projectDirectory, env),
               askLlm,
@@ -190,6 +231,7 @@ export default Plugin.define({
               sendFinal: async (text: string) => {
                 await sendPrompt(ctx, sessionID, text, false)
               },
+              listMcpResources,
             }
 
             if (isBrowser) {
