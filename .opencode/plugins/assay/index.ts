@@ -102,7 +102,13 @@ export default Plugin.define({
             ctx.location?.project?.directory ||
             ctx.location?.directory ||
             process.cwd()
-          const goal = (prompt.text || "").trim() || "Assess release readiness of the target."
+          const raw = (prompt.text || "").trim()
+          if (/^(commands|list|help|--help|-h)$/i.test(raw)) {
+            const names = ["assay", ...assayCommands.map((c) => c.name)].sort()
+            await sendPrompt(ctx, sessionID, "Available assay commands:\n\n" + names.map((n) => "- /" + n).join("\n"))
+            return
+          }
+          const goal = raw || "Assess release readiness of the target."
 
           const progress = (message: string) => {
             process.stderr.write(`[assay-agent] ${message}\n`)
