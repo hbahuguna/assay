@@ -15,12 +15,12 @@ export interface AgentOptions {
   initialArgs?: string[]
   initialEnv?: NodeJS.ProcessEnv
   maxIterations?: number
-  /** Minimum number of harness runs before the agent may finish. Defaults to 3. */
+  /** Minimum number of harness runs before the agent may finish. Defaults to 1. */
   minHarnessRuns?: number
 }
 
 const DEFAULT_MAX_ITERATIONS = 7
-const DEFAULT_MIN_HARNESS_RUNS = 3
+const DEFAULT_MIN_HARNESS_RUNS = 1
 
 const CONTEXT_TYPES = ["jira", "slack", "github", "doc", "url", "text"] as const
 const SENSITIVE_ASSIGNMENT = /\b(authorization|cookie|token|secret|password|api[_-]?key|session)\b\s*[:=]\s*([^\s,;"']+)/gi
@@ -34,42 +34,42 @@ function redactTranscriptText(value: string): string {
 
 function formatNeedContext(decision: any, mcpResources: string[], goal: string): string {
   const need = decision?.need_user_context || {}
-  const requestedType = String(need.type || "text").toLowerCase()
+  const requestedType = String(need.type || "jira").toLowerCase()
   const ordered = [...CONTEXT_TYPES]
   const type = (ordered.includes(requestedType as any) ? requestedType : "text") as string
-  const question = String(need.question || "Additional context is needed to refine the test plan.")
+  const question = String(need.question || "Additional context is needed to refine the test plan and decide the next unique test.")
   const requested = Array.isArray(need.requested) && need.requested.length
     ? need.requested.map((x: any) => `- ${String(x)}`)
-    : ["- Relevant acceptance criteria, user flow details, or constraints"]
+    : ["- Relevant acceptance criteria, user flows, expected behavior, or constraints"]
   const reason = String(decision?.reason || "Current evidence is insufficient to plan precise functional verification.")
   const mcpSection = mcpResources.length
-    ? `\n## Available MCP resources (if relevant)\n${mcpResources.map((r) => `- ${r}`).join("\n")}\n`
-    : `\n## MCP/connectors\n- No MCP resources discovered in this session. You can paste context directly, or configure a connector and rerun.\n`
+    ? `\n## Available MCP resources (if relevant)\n${mcpResources.map((r) => `- ${r}`).join("\n")}`
+    : `\n## Available MCP resources\n- None discovered in this session.`
 
-  return `## More context needed (same intent)
+  return `## Context requested before next iteration (same intent)
 
 **Goal/intent:** ${goal}
-**Requested context type (priority):** ${type}
+**Suggested source (priority):** ${type} (order: Jira → Slack → GitHub → Doc → URL/Text)
 **Why:** ${reason}
 
 **Question:** ${question}
 
-## What to provide (in priority order)
-1. **Jira**: issue key/URL and acceptance criteria (or paste the story).
-2. **Slack**: thread URL or key discussion summary/decision.
-3. **GitHub**: issue/PR/discussion URL or relevant details.
-4. **Doc**: link or pasted requirements/design notes.
-5. **URL/Text**: specific page URL to test or pasted context.
-${mcpSection}
 ## Suggested details
 ${requested.join("\n")}
+${mcpSection}
+
+## Your choice (reply/rerun with one of these)
+1. **Skip this context**: reply with \`skip context\` (or rerun with \`/assay ${goal} [context:skip]\`) to proceed without this context; gaps/assumptions will be recorded explicitly.
+2. **Provide context** (choose source: Jira/Slack/GitHub/Doc/URL/Text) and tell me the method:
+   - **Plain text paste (recommended):** paste the relevant story/AC/thread/notes directly.
+   - **Connect via MCP:** provide the exact identifier (e.g. Jira issue key/URL, Slack thread, GitHub issue/PR) and confirm which MCP resource/server to use.
+   - **Safely submitted API token (opt-in):** only if you explicitly choose this; provide the token via a secure local mechanism (e.g. env/secret reference configured for the connector), never paste secrets into chat or evidence. If not configured, use paste or MCP instead.
 
 ## How to continue
-- Reply/rerun with the context included, e.g. \`/assay ${goal} <paste Jira AC / thread summary / doc details>\` (or run the same command with the extra context).
-- If a connector/MCP is configured, provide the exact Jira/Slack/GitHub identifier and confirm it should be used; otherwise paste the relevant content.
-- Reply with “skip context” to proceed using current evidence only (gaps will be reported explicitly).
+- Rerun with your response included, e.g. \`/assay ${goal} [source:jira method:paste context:skip?no] <paste AC / summary>\` or \`/assay ${goal} [source:slack method:mcp id:<thread> server:<name>]\`.
+- No previously executed test/command will be repeated; after receiving your context/skip choice the agent will run the next unique step from the plan (if any) and ask for context again.
 
-> Sensitive values should not be shared; redact tokens/secrets before providing context.`
+> Redact tokens/secrets before sharing. External context informs planning only; findings require harness evidence.`
 }
 
 function extractRunIds(output: string): string[] {
@@ -190,6 +190,11 @@ function browserEnvFor(args: string[]): NodeJS.ProcessEnv | undefined {
   return { ...process.env, QH_SSRF_ALLOWLIST: "127.0.0.0/8,::1,localhost" }
 }
 
+function commandSignature(args: string[], env?: NodeJS.ProcessEnv): string {
+  const relevantEnv = env?.QH_SSRF_ALLOWLIST ? `|QH_SSRF_ALLOWLIST=${env.QH_SSRF_ALLOWLIST}` : ""
+  return `${args.join(" ")}${relevantEnv}`
+}
+
 export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Promise<void> {
   const { goal, personasDir } = options
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS
@@ -206,6 +211,8 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   const initialArgs =
     options.initialArgs ||
     ["run", "--target", ".", "--no-browser", "--personas-dir", personasDir, "--intent", goal]
+  const executedCommands = new Set<string>()
+  executedCommands.add(commandSignature(initialArgs, options.initialEnv))
   const initialOutput = await deps.runHarness(initialArgs, options.initialEnv)
   transcript.push(`=== Initial run ===\n${redactTranscriptText(initialOutput)}`)
   runIds.push(...extractRunIds(initialOutput))
@@ -279,14 +286,13 @@ or
         log("Test plan created from source context:")
         for (const line of testPlan.split("\n")) log(`  ${line}`)
         process.stderr.write(`\n[assay-agent] TEST PLAN\n${testPlan}\n\n`)
-        void deps.sendFinal ? null : null
         transcript.push(`=== Test plan ===\n${testPlan}`)
       }
       if (decision.need_user_context) {
         const mcpResources = await discoverMcpResources(deps)
         const requestMsg = formatNeedContext(decision, mcpResources, goal)
         log("Additional user context requested by judge.")
-        const planMsg = testPlan ? `\n\n## Test plan so far\n${testPlan}` : ""
+        const planMsg = testPlan ? `\n\n## Test plan\n${testPlan}` : ""
         const details = runSummaries.length ? `\n\n## What was executed (all runs/checks)\n${runSummaries.join("\n\n")}` : ""
         await deps.sendFinal(`${requestMsg}${planMsg}${details}\n\n## Run IDs\n${runIds.join(", ") || "(none)"}`)
         return
@@ -327,15 +333,25 @@ or
       continue
     }
 
-    log(`Executing: ${cmd}`)
     const invocation = commandToArgs(cmd, personasDir)
     if (invocation.error) {
       log(invocation.error)
       transcript.push(`Rejected: ${invocation.error}`)
       continue
     }
+    const env = browserEnvFor(invocation.args)
+    const sig = commandSignature(invocation.args, env)
+    if (executedCommands.has(sig)) {
+      log(`Skipping duplicate command (already executed): ${cmd}`)
+      transcript.push(`Skipped duplicate: ${cmd}`)
+      // force context request/next unique step by continuing loop; LLM will be asked again with executed list
+      currentReport = `${currentReport}\n\nNOTE: Command was skipped because it was already executed: ${cmd}. Choose a different unique step or request context/skip.`
+      continue
+    }
 
-    const output = await deps.runHarness(invocation.args, browserEnvFor(invocation.args))
+    log(`Executing: ${cmd}`)
+    executedCommands.add(sig)
+    const output = await deps.runHarness(invocation.args, env)
     transcript.push(`=== Command: ${cmd} ===\n${redactTranscriptText(output)}`)
     runIds.push(...extractRunIds(output).filter((id) => !runIds.includes(id)))
     runSummaries.push(`Command: ${cmd}\n${summarizeRunOutput(output)}`)
