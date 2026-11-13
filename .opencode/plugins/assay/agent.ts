@@ -11,6 +11,8 @@ export interface AgentDeps {
   progress?: (message: string) => void
   sendFinal: (text: string) => Promise<void>
   listMcpResources?: () => Promise<string[]>
+  /** Ask the user for context in-session and resolve with their reply text (no rerun). */
+  requestUserInput?: (prompt: string) => Promise<string>
 }
 
 export interface AgentOptions {
@@ -28,6 +30,8 @@ export interface AgentOptions {
   stateKey?: string
   /** Session ID for interactive resume in chat. */
   sessionID?: string
+  /** Keep running and wait for in-session replies instead of returning on context requests. */
+  interactive?: boolean
 }
 
 const DEFAULT_MAX_ITERATIONS = 7
@@ -276,9 +280,9 @@ function commandSignature(args: string[], env?: NodeJS.ProcessEnv): string {
 
 function parseUserContext(input: string): { skip?: boolean; source?: string; method?: string; envRef?: string; id?: string; server?: string; text?: string } {
   const raw = String(input || "")
-  const lower = raw.toLowerCase()
+  const lower = raw.trim().toLowerCase()
   const out: any = {}
-  if (/\[context:skip\]/i.test(raw) || /\bskip\s+context\b/i.test(lower)) out.skip = true
+  if (/\[context:skip\]/i.test(raw) || /\bskip\s+context\b/i.test(lower) || /^(skip|none|no|n\/a|na)$/i.test(raw.trim())) out.skip = true
   const sourceM = raw.match(/\[source:(jira|slack|github|doc|url|text)\]/i) || lower.match(/\bsource\s*[:=]\s*(jira|slack|github|doc|url|text)\b/i)
   if (sourceM) out.source = sourceM[1].toLowerCase()
   const methodM = raw.match(/\[method:(paste|mcp|token)\]/i) || lower.match(/\bmethod\s*[:=]\s*(paste|mcp|token)\b/i)
@@ -301,6 +305,7 @@ function parseUserContext(input: string): { skip?: boolean; source?: string; met
 function applyContextResponse(state: AgentState, input: string): { progressed: boolean; message?: string } {
   if (!state.pending) return { progressed: false }
   const resp = parseUserContext(input)
+  const raw = String(input || "").trim()
   if (state.pending.kind === "need_method") {
     if (resp.skip) {
       state.contextLog.push(`step ${state.step}: ${state.pending.type} context skipped by user`)
@@ -308,15 +313,23 @@ function applyContextResponse(state: AgentState, input: string): { progressed: b
       state.step += 1
       return { progressed: true }
     }
-    if (!resp.method) {
-      return { progressed: false, message: "Please choose a method: [method:paste], [method:mcp], or [method:token] (with secure env ref), or [context:skip]." }
+    let method = resp.method
+    if (!method) {
+      const lower = raw.toLowerCase()
+      if (/^(paste|text)$/.test(lower)) method = "paste"
+      else if (/^(mcp)$/.test(lower)) method = "mcp"
+      else if (/^(token|api token)$/.test(lower)) method = "token"
+      else if (resp.text || (raw && !/^\[/.test(raw))) method = "paste"
     }
-    if (resp.method === "token") {
+    if (!method) {
+      return { progressed: false, message: "Please choose a method: paste, mcp, or token (secure env ref), or reply `skip`." }
+    }
+    if (method === "token") {
       state.contextLog.push(`step ${state.step}: ${state.pending.type} context via token/secret-ref (${resp.envRef || "env ref not provided"}${resp.id ? ", id provided" : ""})`)
-    } else if (resp.method === "mcp") {
-      state.contextLog.push(`step ${state.step}: ${state.pending.type} context via MCP (server=${resp.server || "?"}, id=${resp.id || "?"})`)
+    } else if (method === "mcp") {
+      state.contextLog.push(`step ${state.step}: ${state.pending.type} context via MCP (server=${resp.server || "?"}, id=${resp.id || "?"})${resp.text ? ` note=${redactTranscriptText(resp.text).slice(0, 200)}` : ""}`)
     } else {
-      const snippet = redactTranscriptText(resp.text || "").slice(0, 800)
+      const snippet = redactTranscriptText(resp.text || raw).slice(0, 800)
       state.contextLog.push(`step ${state.step}: ${state.pending.type} context via paste${snippet ? `: ${snippet}` : ""}`)
     }
     state.pending = null
@@ -331,6 +344,14 @@ function applyContextResponse(state: AgentState, input: string): { progressed: b
     return { progressed: true }
   }
   const source = resp.source || (state.pending.type as string) || "text"
+  // If user provided substantial free text without explicit method, treat as paste for this source.
+  const hasFreeText = !!(resp.text && !resp.method)
+  if (!resp.method && hasFreeText) {
+    state.contextLog.push(`step ${state.step}: ${source} context via paste: ${redactTranscriptText(resp.text || "").slice(0, 800)}`)
+    state.pending = null
+    state.step += 1
+    return { progressed: true }
+  }
   if (!resp.method) {
     // ask for method next
     state.pending = { kind: "need_method", type: source, question: state.pending.question, requested: state.pending.requested, reason: state.pending.reason }
@@ -346,6 +367,38 @@ function buildExecutionSummary(state: AgentState): string {
   const details = state.runSummaries.length ? `\n\n## What was executed (all runs/checks)\n${state.runSummaries.join("\n\n")}` : ""
   const ctx = state.contextLog.length ? `\n\n## Context decisions\n${state.contextLog.map((c) => `- ${c}`).join("\n")}` : ""
   return `${planMsg}${details}${ctx}\n\n## Run IDs\n${state.runIds.join(", ") || "(none)"}`
+}
+
+async function requestContextAndMaybeWait(
+  state: AgentState,
+  cwd: string | undefined,
+  goal: string,
+  deps: AgentDeps,
+  options: AgentOptions,
+): Promise<boolean> {
+  const mcpResources = await discoverMcpResources(deps)
+  const requestMsg = formatNeedContext(state.pending!, mcpResources, goal)
+  await deps.sendFinal(`${requestMsg}${buildExecutionSummary(state)}`)
+  saveState(cwd, state)
+  if (options.interactive && deps.requestUserInput) {
+    while (state.pending) {
+      const reply = await deps.requestUserInput("awaiting assay context")
+      const applied = applyContextResponse(state, String(reply || ""))
+      saveState(cwd, state)
+      if (applied.message) {
+        await deps.sendFinal(applied.message)
+        saveState(cwd, state)
+        continue
+      }
+      if (applied.progressed) return true
+      // If not progressed and no message (unexpected), re-ask
+      const mcp2 = await discoverMcpResources(deps)
+      await deps.sendFinal(formatNeedContext(state.pending!, mcp2, goal))
+      saveState(cwd, state)
+    }
+    return true
+  }
+  return false
 }
 
 export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Promise<void> {
@@ -425,16 +478,20 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
     saveState(cwd, state)
   }
 
-  // If waiting for user context/method, ask and stop (user must respond in a new invocation)
+  // If waiting for user context/method, ask and either wait in-session or stop for resume
   if (state.pending) {
-    const mcpResources = await discoverMcpResources(deps)
-    const requestMsg = formatNeedContext(state.pending, mcpResources, goal)
-    await deps.sendFinal(`${requestMsg}${buildExecutionSummary(state)}`)
-    saveState(cwd, state)
-    return
+    const continued = await requestContextAndMaybeWait(state, cwd, goal, deps, options)
+    if (!continued) return
   }
 
-  for (let i = 0; i < maxIterations; i++) {
+  let iterations = 0
+  while (iterations < maxIterations) {
+    iterations += 1
+    // if pending at loop top (e.g. after resume), resolve it
+    if (state.pending) {
+      const continued = await requestContextAndMaybeWait(state, cwd, goal, deps, options)
+      if (!continued) return
+    }
     const needsPlan = !state.testPlan
     log(`Iteration ${state.step + 1}: consulting LLM for next step...`)
 
@@ -498,9 +555,9 @@ or
         reason: String(decision.reason || ""),
       }
       saveState(cwd, state)
-      const mcpResources = await discoverMcpResources(deps)
-      await deps.sendFinal(`${formatNeedContext(state.pending, mcpResources, goal)}${buildExecutionSummary(state)}`)
-      return
+      const continued = await requestContextAndMaybeWait(state, cwd, goal, deps, options)
+      if (!continued) return
+      continue
     }
 
     if (decision.done) {
@@ -515,9 +572,9 @@ or
           reason: `Completion rejected: only ${harnessRuns} of ${minHarnessRuns} required harness run(s) completed.`,
         }
         saveState(cwd, state)
-        const mcpResources = await discoverMcpResources(deps)
-        await deps.sendFinal(`${formatNeedContext(state.pending, mcpResources, goal)}${buildExecutionSummary(state)}`)
-        return
+        const continued = await requestContextAndMaybeWait(state, cwd, goal, deps, options)
+        if (!continued) return
+        continue
       }
       log("Agent decided it is done.")
       saveState(cwd, state)
@@ -565,9 +622,9 @@ or
       reason: "Context/skip checkpoint after executing a unique test step.",
     }
     saveState(cwd, state)
-    const mcpResources = await discoverMcpResources(deps)
-    await deps.sendFinal(`${formatNeedContext(state.pending, mcpResources, goal)}${buildExecutionSummary(state)}`)
-    return
+    const continued = await requestContextAndMaybeWait(state, cwd, goal, deps, options)
+    if (!continued) return
+    continue
   }
 
   saveState(cwd, state)

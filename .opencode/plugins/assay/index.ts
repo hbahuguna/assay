@@ -4,6 +4,26 @@ import { fileURLToPath } from "node:url"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
+const replyWaiters = new Map<string, Array<(text: string) => void>>()
+
+function waitForUserReply(sessionID: string): Promise<string> {
+  return new Promise((resolveWait) => {
+    const list = replyWaiters.get(sessionID) || []
+    list.push(resolveWait)
+    replyWaiters.set(sessionID, list)
+  })
+}
+
+function deliverUserReply(sessionID: string, text: string): boolean {
+  const list = replyWaiters.get(sessionID)
+  if (!list || list.length === 0) return false
+  const resolveWait = list.shift()!
+  if (list.length === 0) replyWaiters.delete(sessionID)
+  else replyWaiters.set(sessionID, list)
+  resolveWait(text)
+  return true
+}
+
 import { browserInvocation, demoInvocation } from "./command-args.ts"
 import { runAgentLoop } from "./agent.ts"
 import { browserEnv, runAssay } from "./runner.ts"
@@ -204,7 +224,7 @@ export default Plugin.define({
 
           const baseGoal = raw.replace(/\[(?:context|source|method|env|secret_ref|secret-ref|id|server|mcp_server|mcp-server)\s*:[^\]]+\]/gi, "").replace(/\bskip\s+context\b/gi, "").trim() || goal
           await runAgentLoop(
-            { goal: baseGoal, personasDir: PERSONAS, cwd: projectDirectory, userInput: raw, stateKey: `assay|${baseGoal}`, sessionID },
+            { goal: baseGoal, personasDir: PERSONAS, cwd: projectDirectory, userInput: raw, stateKey: `assay|${baseGoal}`, sessionID, interactive: true },
             {
               runHarness: (args, env) => runAssay(args, projectDirectory, env),
               askLlm,
@@ -213,6 +233,7 @@ export default Plugin.define({
                 await sendPrompt(ctx, sessionID, text, false)
               },
               listMcpResources,
+              requestUserInput: () => waitForUserReply(sessionID),
             },
           )
         },
@@ -282,6 +303,7 @@ export default Plugin.define({
                 await sendPrompt(ctx, sessionID, text, false)
               },
               listMcpResources,
+              requestUserInput: () => waitForUserReply(sessionID),
             }
 
             const raw = (prompt.text || "").trim()
@@ -302,6 +324,7 @@ export default Plugin.define({
                   userInput: raw,
                   stateKey: stateKeyBase,
                   sessionID,
+                  interactive: true,
                 },
                 deps,
               )
@@ -320,6 +343,7 @@ export default Plugin.define({
                   userInput: raw,
                   stateKey: stateKeyBase,
                   sessionID,
+                  interactive: true,
                 },
                 deps,
               )
@@ -345,6 +369,7 @@ export default Plugin.define({
                 userInput: raw,
                 stateKey: stateKeyBase,
                 sessionID,
+                interactive: true,
               },
               deps,
             )
@@ -443,12 +468,15 @@ export default Plugin.define({
           try {
             const t = event?.type || event?.name || ""
             if (!/message/i.test(String(t))) return
-            const sessionID = event?.properties?.sessionID || event?.sessionID || event?.properties?.info?.sessionID || event?.properties?.message?.sessionID
+            const sessionID = String(event?.properties?.sessionID || event?.sessionID || event?.properties?.info?.sessionID || event?.properties?.message?.sessionID || "")
             const role = event?.properties?.info?.role || event?.properties?.message?.role || event?.role
             if (role && role !== "user") return
             const text = extractUserTextFromEvent(event)
-            if (!text) return
-            await tryResume(String(sessionID || ""), text)
+            if (!sessionID || !text) return
+            // If a live interactive loop is waiting in this session, deliver the reply to continue the flow.
+            if (deliverUserReply(sessionID, text)) return
+            // Otherwise, allow persisted-state resume when the user replies with context tags.
+            await tryResume(sessionID, text)
           } catch {}
         }
         if (typeof ctx.event?.subscribe === "function") ctx.event.subscribe(onEvent)
