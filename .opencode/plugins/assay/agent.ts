@@ -87,12 +87,18 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   for (let i = 1; i < maxIterations; i++) {
     log(`Iteration ${i + 1}: consulting LLM for next step...`)
 
-    const decisionPrompt = `You are the assay agent. Goal: ${goal}
+    const decisionPrompt = `You are a strict assay judge for the quality-harness agent. Goal: ${goal}
 
 Latest harness report:
 ${currentReport}
 
-Decide the NEXT SINGLE harness command to run, or finish.
+Your job is to be skeptical and maximize useful coverage before finishing. Do not summarize after the first run unless there is genuinely nothing more to check.
+
+Review the latest report and decide the NEXT SINGLE harness command to run, or finish:
+- Treat failed, errored, blocked, skipped, or low-confidence/coverage-gap checks as requiring scrutiny. Blocked/skipped/errored checks are coverage gaps, never passes.
+- Prefer follow-up runs that stay aligned with the same assessment intent/persona scope as the goal (reuse the same intent/category wording when running another assessment). You may rerun with different flags or targets only when they add evidence (e.g. add browser checks for a known URL, inspect report/status/root state, run a more specific intent, or re-check after gathering context).
+- Do not invent evidence, do not weaken findings, and do not claim a check passed if it was blocked/skipped/errored.
+- Finish only when: key risks are evidenced, remaining gaps are explicitly explained as uncheckable/blocked with reasons, and another allowed command would not add meaningful evidence.
 
 Allowed commands:
 - run --target <path-or-url> --no-browser --personas-dir ${personasDir} --intent "<intent>"
@@ -102,12 +108,10 @@ Allowed commands:
 - report --root <root>
 - status --root <root>
 
-If a URL is known, you may run browser checks.
-
 Output ONLY one JSON object, no markdown:
-{"command": "<full command>", "reason": "<why>"}
+{"command": "<full command>", "reason": "<why this adds evidence / what gap it addresses>"}
 or
-{"done": true, "summary": "<final narrative>", "fixes": ["<fix>", ...]}`
+{"done": true, "summary": "<final narrative with evidence-backed assessment, gaps, and confidence>", "fixes": ["<concrete developer fix>", ...]}`
 
     let llmText = ""
     try {

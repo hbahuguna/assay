@@ -151,6 +151,39 @@ TEST_HINTS = ("test", "spec", "__tests__", "tests", "e2e", "fixture")
 # persisted, so an inline note cannot leak a credential into evidence.
 ISSUE_MARKER_PATTERN = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")
 
+# Extended "more" assessment surfaces are inventoried as deterministic counts
+# and paths/names only; no file contents are persisted.
+MORE_DOC_HINTS = {
+    "readme",
+    "contributing",
+    "changelog",
+    "changes",
+    "license",
+    "security",
+    "support",
+    "code_of_conduct",
+    "architecture",
+}
+MORE_EXAMPLE_HINTS = {"example", "examples", "sample", "samples", "fixture", "fixtures"}
+MORE_CONFIG_NAMES = {
+    "dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    "compose.yaml",
+    "makefile",
+    "justfile",
+    "tox.ini",
+    "pyproject.toml",
+    "package.json",
+    "tsconfig.json",
+    "webpack.config.js",
+    "vite.config.js",
+    "vite.config.ts",
+    ".eslintrc",
+    ".prettierrc",
+}
+
 # Demo/example surfaces are inventoried for the /assay-demo category. Only
 # paths and entry-point names are persisted, never file contents.
 DEMO_HINTS = {
@@ -1393,6 +1426,86 @@ class StaticCheckRunner:
                 "quickstart_docs": len(quickstart_docs),
                 "behavioral_evidence": False,
                 "limitation": limitation,
+            },
+        )
+
+    def check_static_more_category(self, check: Check) -> CheckOutcome:
+        files = sorted(self.inventory.files)
+        docs: List[str] = []
+        examples: List[str] = []
+        configs: List[str] = []
+        scripts: List[str] = []
+
+        for rel in files:
+            lower = rel.lower()
+            name = Path(lower).name
+            stem = Path(name).stem
+            parts = [p.lower() for p in Path(rel).parts]
+            if lower.endswith((".md", ".mdx", ".rst", ".txt", ".adoc")) and (
+                stem in MORE_DOC_HINTS
+                or "readme" in name
+                or "/docs/" in "/" + lower
+                or lower.startswith("docs/")
+            ):
+                docs.append(rel)
+            if any(part in MORE_EXAMPLE_HINTS for part in parts[:-1]) or stem in MORE_EXAMPLE_HINTS:
+                examples.append(rel)
+            if name in MORE_CONFIG_NAMES or any(name.endswith(ext) for ext in (".yml", ".yaml")) and ("docker" in name or "compose" in name):
+                configs.append(rel)
+
+        package_json = self.root / "package.json"
+        if package_json.exists():
+            try:
+                data = json.loads(package_json.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            script_map = data.get("scripts") if isinstance(data, dict) else None
+            if isinstance(script_map, dict):
+                scripts.extend("script:" + name for name in sorted(script_map)[:20])
+
+        for make_name in ("Makefile", "makefile", "Justfile", "justfile"):
+            make_path = self.root / make_name
+            if not make_path.exists():
+                continue
+            for line in self._read(make_path).splitlines()[:200]:
+                match = re.match(r"^([A-Za-z0-9_.-]+):(?!=)", line)
+                if match:
+                    scripts.append("task:" + match.group(1))
+        scripts = sorted(set(scripts))[:20]
+
+        payload = {
+            "category": "more",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "test_files": len(self.inventory.test_files),
+            "docs": docs[:20],
+            "examples": examples[:20],
+            "configs": sorted(set(configs))[:20],
+            "scripts": scripts,
+            "ci_files": sorted(getattr(self.inventory, "ci_files", []) or [])[:20],
+            "manifests": list(self.inventory.manifests)[:20],
+        }
+        evidence = self._save(
+            "more-category-scope",
+            payload,
+            check,
+            "Extended 'more' category assessment scope and additional surface inventory.",
+        )
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual=(
+                "More category assessment recorded with {} doc(s), {} example path(s), "
+                "{} config file(s), and {} script/task entry point(s)."
+            ).format(len(docs), len(examples), len(set(configs)), len(scripts)),
+            evidence=[evidence],
+            metadata={
+                "category": "more",
+                "docs": len(docs),
+                "examples": len(examples),
+                "configs": len(set(configs)),
+                "scripts": len(scripts),
             },
         )
 

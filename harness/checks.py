@@ -87,6 +87,16 @@ CHECK_CATALOG: List[CheckDefinition] = [
         requires="any",
     ),
     CheckDefinition(
+        id="static.more_category",
+        title="More category assessment scope is recorded",
+        domain="functional",
+        kind="static",
+        intent="Confirm that the more/extended assessment category was requested and represented.",
+        expected="The run intent explicitly requests the more category and an extended inventory of additional assessment surfaces is recorded as evidence.",
+        base_weight=0.5,
+        requires="any",
+    ),
+    CheckDefinition(
         id="static.inventory",
         title="Source and test inventory is complete and readable",
         domain="functional",
@@ -285,6 +295,11 @@ def _is_demo_category_intent(intent: str) -> bool:
     return "assay demo assessment" in text or "demo category assessment" in text
 
 
+def _is_more_category_intent(intent: str) -> bool:
+    text = (intent or "").lower()
+    return "assay more assessment" in text or "more category assessment" in text
+
+
 def _applicable(
     definition: CheckDefinition,
     inventory: Dict[str, Any],
@@ -313,6 +328,8 @@ def _applicable(
         return _is_demo_category_intent(intent) and not (
             target.kind == "url" and not no_browser
         )
+    if definition.id == "static.more_category":
+        return _is_more_category_intent(intent)
     source_available = bool(inventory.get("available"))
     has_markup = bool(inventory.get("has_markup"))
     has_manifest = bool(inventory.get("has_manifest"))

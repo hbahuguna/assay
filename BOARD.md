@@ -144,19 +144,32 @@ into a false release signal.
 - **Priority:** P2
 - **Points:** 3
 - **Depends on:** QH-036
-- **Status:** Ready
+- **Status:** Done
 - **Description:** Implement deterministic harness coverage for the `/assay-more`
   category, including any required check, persona ownership, evidence capture,
   scoring impact, redaction, and report representation. Work this card
   independently and add a focused regression test before moving on.
 - **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
+  - [x] The category is represented by at least one owned check or an explicit
+    documented no-op with rationale. `static.more_category` (functional-owned,
+    weight 0.5, intent-gated on "Assay more assessment"/"more category assessment")
+    records an extended deterministic inventory of docs, examples, configs,
+    scripts/tasks, CI, and manifests as evidence.
+  - [x] A deterministic fixture or unit test exercises the category.
+    `tests/test_more_category.py` covers intent planning/execution, evidence
+    hashing/linking, report/confidence accounting, phrase alias, and non-intent
+    exclusion.
+  - [x] Evidence is hashed, redacted, and linked to findings. `more-category-scope`
+    artifacts are stored via the evidence store and verified in tests.
+  - [x] The report and confidence calculation account for the category without
+    changing unrelated weights. The check is intent-gated, so default/unrelated
+    runs are unchanged.
+  - [x] `python -m unittest discover -s tests` passes (303 tests).
+- **Verification:** `/usr/local/bin/python3.11 -m harness personas lint --personas-dir personas`;
+  `/usr/local/bin/python3.11 -m unittest tests.test_more_category tests.test_issues_category tests.test_demo_category`;
+  `/usr/local/bin/python3.11 -m unittest discover -s tests` (303 OK). Plugin:
+  `/assay-more` now runs through the autonomous strict-judge agent loop (cap 7,
+  same intent scope) like other assay commands.
 
 ### QH-046 - Add harness support for the /assay-help test category
 
@@ -2728,3 +2741,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D47 | 2026-11-13 | The unsafe-code rule matches bare `eval`/`exec` calls but not member calls such as `db.exec()` or `RegExp.exec()`. A separate high-severity rule detects `child_process.exec`/`execSync`. Synthetic test credentials are skipped only when the value matches a known dummy prefix or placeholder, and the skipped count is recorded in evidence. | The broad `\b(?:eval\|exec)\s*\(` pattern made 16 of 18 hits in one real repository benign. Member calls have different semantics, while bare `exec` remains a genuine arbitrary-execution surface. Value-based dummy matching removes fixture noise without suppressing a real-looking credential in a test file. | Add language-aware AST rules for Node, Python, and Go once a dependency-free parser strategy exists. |
 | D48 | 2026-11-13 | `/assay-demo` is an explicit two-mode command. Without a URL it records only a demo-surface inventory and adds a "no behavioral demo evidence" limitation. With an http(s) URL it runs the real `browser.*` checks and suppresses `static.demo_category`. The OSS core never launches or executes target demo code. | The previous command could not distinguish "demo assets exist" from "the demo works," so a static HOLD looked like a demo verdict. Requiring a URL for behavioral evidence keeps the command honest without adding a sandboxed launcher, and skipping the static marker avoids double-counting the category. | Add a sandboxed launcher or a documented demo URL convention only when a concrete fixture and isolation model exist. |
 | D49 | 2026-11-13 | Risk analysis uses the same tracked-file view as static checks when git metadata is available, so ignored/untracked environment files no longer generate a high-priority risk. | Risk text and check findings must agree; otherwise the report contradicts itself and overstates repository exposure. Keeping risk analysis on the tracked set preserves the dependency check's semantics. | Revisit if risk analysis gains a separate untracked-local-secret hygiene signal. |
+| D50 | 2026-11-13 | The `/assay-more` category is represented by an intent-gated `static.more_category` scope check owned by the functional persona. It records a deterministic extended inventory (docs, examples, configs, scripts/tasks, CI, manifests) as counts/paths/names only, with hashed evidence and no findings. `/assay-more` runs through the plugin's strict-judge agent loop to encourage evidence-adding follow-ups while keeping the harness deterministic. | "More" needs a concrete, redaction-safe representation without inventing subjective findings. Intent gating and a 0.5 base weight preserve unrelated confidence calculations, while the agent loop addresses the command's need for iterative scrutiny. | Add category-specific opportunity heuristics only when a deterministic, auditable rule exists. |

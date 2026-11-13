@@ -102,6 +102,7 @@ class RegistryTests(unittest.TestCase):
                 "static.browser_category",
                 "static.issues_category",
                 "static.demo_category",
+                "static.more_category",
                 "browser.load",
                 "browser.console",
                 "browser.network",

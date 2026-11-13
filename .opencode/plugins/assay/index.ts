@@ -224,23 +224,23 @@ export default Plugin.define({
               return
             }
 
-            const output = await runAssay(
-              [
-                "run",
-                "--target",
-                ".",
-                "--no-browser",
-                "--personas-dir",
-                PERSONAS,
-                "--intent",
-                `Assay ${command.label} assessment`,
-              ],
-              projectDirectory,
-            )
-            await sendPrompt(
-              ctx,
-              sessionID,
-              `Assay output:\n\n\`\`\`\n${output}\n\`\`\`\n\nSummarize these results. Additional commands are allowed and expected when needed.`,
+            const intent = `Assay ${command.label} assessment`
+            await runAgentLoop(
+              {
+                goal: intent,
+                personasDir: PERSONAS,
+                initialArgs: [
+                  "run",
+                  "--target",
+                  ".",
+                  "--no-browser",
+                  "--personas-dir",
+                  PERSONAS,
+                  "--intent",
+                  intent,
+                ],
+              },
+              deps,
             )
           },
         })
