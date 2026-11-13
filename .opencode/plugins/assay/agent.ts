@@ -14,9 +14,12 @@ export interface AgentOptions {
   initialArgs?: string[]
   initialEnv?: NodeJS.ProcessEnv
   maxIterations?: number
+  /** Minimum number of harness runs before the agent may finish. Defaults to 3. */
+  minHarnessRuns?: number
 }
 
 const DEFAULT_MAX_ITERATIONS = 7
+const DEFAULT_MIN_HARNESS_RUNS = 3
 
 function extractRunIds(output: string): string[] {
   const ids: string[] = []
@@ -68,11 +71,12 @@ function browserEnvFor(args: string[]): NodeJS.ProcessEnv | undefined {
 export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Promise<void> {
   const { goal, personasDir } = options
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS
+  const minHarnessRuns = Math.max(1, Math.min(options.minHarnessRuns ?? DEFAULT_MIN_HARNESS_RUNS, maxIterations))
   const transcript: string[] = []
   const runIds: string[] = []
   const log = deps.progress || ((message: string) => process.stderr.write(`[assay-agent] ${message}\n`))
 
-  log(`Starting autonomous assay agent (max ${maxIterations} iterations)`)
+  log(`Starting autonomous assay agent (max ${maxIterations} iterations, min ${minHarnessRuns} harness runs)`)
   log(`Goal: ${goal}`)
 
   log("Iteration 1: running initial assessment...")
@@ -87,7 +91,11 @@ export async function runAgentLoop(options: AgentOptions, deps: AgentDeps): Prom
   for (let i = 1; i < maxIterations; i++) {
     log(`Iteration ${i + 1}: consulting LLM for next step...`)
 
-    const decisionPrompt = `You are a strict assay judge for the quality-harness agent. Goal: ${goal}
+    let decision: any = null
+    let earlyFinishRejected = false
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const mustContinue = runIds.length < minHarnessRuns
+      const decisionPrompt = `You are a strict assay judge for the quality-harness agent. Goal: ${goal}
 
 Latest harness report:
 ${currentReport}
@@ -98,7 +106,8 @@ Review the latest report and decide the NEXT SINGLE harness command to run, or f
 - Treat failed, errored, blocked, skipped, or low-confidence/coverage-gap checks as requiring scrutiny. Blocked/skipped/errored checks are coverage gaps, never passes.
 - Prefer follow-up runs that stay aligned with the same assessment intent/persona scope as the goal (reuse the same intent/category wording when running another assessment). You may rerun with different flags or targets only when they add evidence (e.g. add browser checks for a known URL, inspect report/status/root state, run a more specific intent, or re-check after gathering context).
 - Do not invent evidence, do not weaken findings, and do not claim a check passed if it was blocked/skipped/errored.
-- Finish only when: key risks are evidenced, remaining gaps are explicitly explained as uncheckable/blocked with reasons, and another allowed command would not add meaningful evidence.
+- You must complete at least ${minHarnessRuns} harness runs before finishing. Completed harness runs so far: ${runIds.length}. ${mustContinue ? "You may NOT finish yet; choose another evidence-adding command with the same intent/scope." : "Finish only when key risks are evidenced, remaining gaps are explicitly explained as uncheckable/blocked with reasons, and another allowed command would not add meaningful evidence."}
+${earlyFinishRejected ? "- Your previous response tried to finish too early and was rejected. Return a command now." : ""}
 
 Allowed commands:
 - run --target <path-or-url> --no-browser --personas-dir ${personasDir} --intent "<intent>"
@@ -113,19 +122,35 @@ Output ONLY one JSON object, no markdown:
 or
 {"done": true, "summary": "<final narrative with evidence-backed assessment, gaps, and confidence>", "fixes": ["<concrete developer fix>", ...]}`
 
-    let llmText = ""
-    try {
-      llmText = await deps.askLlm(decisionPrompt)
-    } catch (e: any) {
-      log(`LLM call failed: ${e?.message || e}`)
+      let llmText = ""
+      try {
+        llmText = await deps.askLlm(decisionPrompt)
+      } catch (e: any) {
+        log(`LLM call failed: ${e?.message || e}`)
+        llmText = ""
+      }
+
+      if (!llmText) {
+        decision = null
+        break
+      }
+      transcript.push(`=== LLM decision (iter ${i + 1}, attempt ${attempt + 1}) ===\n${llmText}`)
+      decision = parseDecision(llmText)
+      if (!decision) {
+        break
+      }
+      if (decision.done && runIds.length < minHarnessRuns) {
+        log(`Rejected early finish: ${runIds.length}/${minHarnessRuns} harness runs completed.`)
+        transcript.push(`Rejected early finish at ${runIds.length}/${minHarnessRuns} harness runs.`)
+        earlyFinishRejected = true
+        decision = null
+        continue
+      }
       break
     }
 
-    transcript.push(`=== LLM decision (iter ${i + 1}) ===\n${llmText}`)
-
-    const decision = parseDecision(llmText)
     if (!decision) {
-      log("Could not parse LLM decision; stopping.")
+      log("Could not obtain a valid next decision; stopping.")
       break
     }
 

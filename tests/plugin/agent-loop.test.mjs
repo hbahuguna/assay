@@ -32,13 +32,13 @@ test("commandToArgs maps assay commands to harness args", () => {
   assert.ok(staticDemo.args.includes("--no-browser"))
 })
 
-test("runAgentLoop stops when the LLM reports done", async () => {
+test("runAgentLoop stops when the LLM reports done after minimum runs", async () => {
   const calls = []
   const finalMessages = []
   const deps = {
     runHarness: async (args) => {
       calls.push(args)
-      return JSON.stringify({ run_id: "20260101T000000Z-test" })
+      return JSON.stringify({ run_id: `run-${calls.length}` })
     },
     askLlm: async () =>
       JSON.stringify({
@@ -51,17 +51,17 @@ test("runAgentLoop stops when the LLM reports done", async () => {
     },
   }
 
-  await runAgentLoop({ goal: "test goal", personasDir: PERSONAS }, deps)
+  await runAgentLoop({ goal: "test goal", personasDir: PERSONAS, minHarnessRuns: 1 }, deps)
 
   assert.equal(calls.length, 1)
   assert.match(finalMessages.at(-1), /All good/)
-  assert.match(finalMessages.at(-1), /20260101T000000Z-test/)
+  assert.match(finalMessages.at(-1), /run-1/)
   assert.match(finalMessages.at(-1), /Fix the XSS/)
 })
 
 test("runAgentLoop executes an allowed browser command", async () => {
   const calls = []
-  let iteration = 0
+  let asks = 0
   const finalMessages = []
   const deps = {
     runHarness: async (args) => {
@@ -69,8 +69,8 @@ test("runAgentLoop executes an allowed browser command", async () => {
       return JSON.stringify({ run_id: `run-${calls.length}` })
     },
     askLlm: async () => {
-      iteration += 1
-      if (iteration === 1) {
+      asks += 1
+      if (asks === 1) {
         return JSON.stringify({ command: "assay-browser http://localhost:3000", reason: "check UI" })
       }
       return JSON.stringify({ done: true, summary: "Done", fixes: [] })
@@ -80,7 +80,7 @@ test("runAgentLoop executes an allowed browser command", async () => {
     },
   }
 
-  await runAgentLoop({ goal: "goal", personasDir: PERSONAS }, deps)
+  await runAgentLoop({ goal: "goal", personasDir: PERSONAS, minHarnessRuns: 2 }, deps)
   const browserCall = calls.find((args) => args.includes("http://localhost:3000"))
   assert.ok(browserCall, "browser command should be executed")
   assert.equal(browserCall.includes("--no-browser"), false)
@@ -102,6 +102,7 @@ test("runAgentLoop respects initial invocation for demo", async () => {
     {
       goal: "Assay demo assessment",
       personasDir: PERSONAS,
+      minHarnessRuns: 1,
       initialArgs: ["run", "--target", "http://localhost:3000", "--personas-dir", PERSONAS, "--intent", "Assay demo assessment"],
     },
     deps,
@@ -109,4 +110,39 @@ test("runAgentLoop respects initial invocation for demo", async () => {
 
   assert.equal(calls[0][calls[0].indexOf("--target") + 1], "http://localhost:3000")
   assert.equal(calls[0].includes("--no-browser"), false)
+})
+
+test("runAgentLoop rejects early done and continues until minimum runs", async () => {
+  const calls = []
+  let asks = 0
+  const finalMessages = []
+  const deps = {
+    runHarness: async (args) => {
+      calls.push(args)
+      return JSON.stringify({ run_id: `run-${calls.length}` })
+    },
+    askLlm: async () => {
+      asks += 1
+      // first ask tries to finish after initial run -> should be rejected
+      if (asks === 1) {
+        return JSON.stringify({ done: true, summary: "Too soon", fixes: [] })
+      }
+      // second ask must provide a command
+      if (asks === 2) {
+        return JSON.stringify({ command: "status --root .harness", reason: "check state" })
+      }
+      // after second harness run, finishing is allowed
+      return JSON.stringify({ done: true, summary: "Thorough enough", fixes: [] })
+    },
+    sendFinal: async (text) => {
+      finalMessages.push(text)
+    },
+  }
+
+  await runAgentLoop({ goal: "goal", personasDir: PERSONAS, minHarnessRuns: 2, maxIterations: 5 }, deps)
+
+  assert.equal(calls.length, 2, "should run initial + one follow-up before finishing")
+  assert.equal(calls[1][0], "status")
+  assert.match(finalMessages.at(-1), /Thorough enough/)
+  assert.match(finalMessages.at(-1), /run-1, run-2/)
 })
