@@ -138,26 +138,6 @@ into a false release signal.
 
 ## Ready
 
-### QH-044 - Add harness support for the /assay-demo test category
-
-- **Epic:** E8 Carbon Test Category Coverage
-- **Priority:** P2
-- **Points:** 3
-- **Depends on:** QH-036
-- **Status:** Ready
-- **Description:** Implement deterministic harness coverage for the `/assay-demo`
-  category, including any required check, persona ownership, evidence capture,
-  scoring impact, redaction, and report representation. Work this card
-  independently and add a focused regression test before moving on.
-- **Acceptance Criteria:**
-  - The category is represented by at least one owned check or an explicit
-    documented no-op with rationale.
-  - A deterministic fixture or unit test exercises the category.
-  - Evidence is hashed, redacted, and linked to findings.
-  - The report and confidence calculation account for the category without
-    changing unrelated weights.
-  - `python -m unittest discover -s tests` passes.
-
 ### QH-045 - Add harness support for the /assay-more test category
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2335,6 +2315,36 @@ No task is claimed. `QH-001` through `QH-036` are complete.
   category phrase, and absence for non-issues intents. Full suite: 289 passing
   tests with Python 3.11.
 
+### QH-044 - Add harness support for the /assay-demo test category
+
+- **Epic:** E8 Carbon Test Category Coverage
+- **Priority:** P2
+- **Points:** 3
+- **Depends on:** QH-036
+- **Status:** Done
+- **Completed:** 2026-11-13
+- **Description:** Added `static.demo_category`, owned by the functional
+  persona, to represent the `/assay-demo` category when an intent explicitly
+  requests a demo assessment. The check inventories demo, example, sample,
+  sandbox, playground, and quickstart paths; detects `demo`, `start`, and `dev`
+  package scripts or Makefile targets; and records documented quickstart
+  references. Only paths and entry-point names are persisted, never file
+  contents. It runs only for demo-category intents, so unrelated runs and
+  weights are unchanged.
+- **Acceptance Criteria:**
+  - The category is represented by at least one owned check or an explicit
+    documented no-op with rationale.
+  - A deterministic fixture or unit test exercises the category.
+  - Evidence is hashed, redacted, and linked to findings.
+  - The report and confidence calculation account for the category without
+    changing unrelated weights.
+  - `python -m unittest discover -s tests` passes.
+- **Acceptance test:** `/usr/local/bin/python3.11 -m unittest tests.test_demo_category -v`
+- **Evidence:** `tests/test_demo_category.py` verifies demo-intent planning,
+  execution against a fixture with a demo directory, package script, and
+  quickstart README, hashed manifest linkage, the alternate category phrase, and
+  absence for non-demo intents. Full suite: 292 passing tests with Python 3.11.
+
 ### QH-097 - Make /assay-browser run live browser checks instead of a static scan
 
 - **Epic:** E8 Carbon Test Category Coverage
@@ -2481,3 +2491,4 @@ The Session 1 foundation is recorded here so the next agent does not rebuild it:
 | D41 | 2026-11-13 | `/assay-browser` is a live-browser command, not a static category alias. It requires an explicit http(s) URL, passes the URL as `--target`, and never injects `--no-browser`. The OpenCode plugin adds a loopback-only SSRF allowlist (`127.0.0.0/8`, `::1`, `localhost`) for that invocation unless the operator already set one; private and metadata networks remain blocked. A missing URL returns actionable guidance instead of running. | The previous wrapper combined a browser intent with `--no-browser` and a directory target, which could only produce `static.browser_category`. Requiring a URL keeps the command honest, while the loopback allowlist makes local dev servers usable without weakening the default SSRF posture for arbitrary hosts. | Revisit the loopback default if browser runs move to isolated cloud workers where localhost has different meaning. |
 | D42 | 2026-11-13 | A comprehensive browser run is a bounded, same-origin crawl inside one deterministic check pack. The seed page is always captured; up to `--max-pages` routes are discovered from rendered links, with external hosts, non-HTTP schemes, forms, downloads, API paths, destructive actions, and known non-HTML suffixes excluded. Each route is captured separately, then each check merges route outcomes; duplicate findings are grouped and capped at ten, and a route that cannot navigate is reported by `browser.load` while other checks mark it `routes_not_evaluated`. `/assay-browser` defaults to crawl plus mobile plus a visible browser, falling back to headless if a window cannot open. | The one-page desktop run was technically real browser testing but could not find broken routes or mobile defects, which made a clean report look more complete than it was. Keeping the crawl same-origin and link-only avoids submitting data or wandering off-site, while per-route evidence preserves the no-evidence-no-finding invariant. Merging into the existing check ids avoids changing scoring weights or the report contract. | Add project-source route hints and authenticated multi-route journeys when a concrete framework or customer fixture justifies them; keep the crawl bound and SSRF-validated. |
 | D43 | 2026-11-13 | The `/assay-issues` category is represented by a `static.issues_category` scope check owned by the functional persona. It inventories TODO, FIXME, HACK, and XXX markers in scanned source, records marker counts and affected paths as evidence, and emits no finding text. The check is planned only when the run intent names the issues category, so default weights and scores are unchanged. | The category needs a deterministic, evidence-backed representation without turning every inline note into a release blocker. Counts and paths preserve operator visibility while avoiding redaction risk from marker prose. Keeping it intent-gated follows the existing category-marker pattern and leaves unrelated confidence calculations untouched. | Promote marker density to a low-severity finding or add issue-tracker ingestion only if a customer workflow requires it. |
+| D44 | 2026-11-13 | The `/assay-demo` category is represented by a `static.demo_category` scope check owned by the functional persona. It inventories demo/example/sample paths, `demo`/`start`/`dev` scripts or Make targets, and quickstart documentation references, persisting only paths and entry-point names. The check is planned only when the run intent names the demo category, so default weights and scores are unchanged. | A demo assessment should say whether a reproducible demo surface exists without reading and persisting arbitrary file contents. Path and entry-point inventory is deterministic, redaction-safe, and gives an operator a concrete place to start. Intent gating keeps unrelated confidence calculations untouched. | Add runnable-demo execution or link checking only when a sandboxed launcher and a concrete fixture justify it. |

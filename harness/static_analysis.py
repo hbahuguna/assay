@@ -149,6 +149,22 @@ TEST_HINTS = ("test", "spec", "__tests__", "tests", "e2e", "fixture")
 # persisted, so an inline note cannot leak a credential into evidence.
 ISSUE_MARKER_PATTERN = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")
 
+# Demo/example surfaces are inventoried for the /assay-demo category. Only
+# paths and entry-point names are persisted, never file contents.
+DEMO_HINTS = {
+    "demo",
+    "demos",
+    "example",
+    "examples",
+    "sample",
+    "samples",
+    "sandbox",
+    "playground",
+    "quickstart",
+}
+DEMO_DOC_HINTS = ("quickstart", "getting started", "run the demo", "demo")
+DEMO_SCRIPT_NAMES = ("demo", "start", "dev")
+
 MAX_SCAN_BYTES = 512 * 1024
 MAX_SCAN_FILES = 2000
 MAX_INVENTORY_FILES = 5000
@@ -1114,6 +1130,92 @@ class StaticCheckRunner:
                 "files_with_issue_markers": len(marker_files),
             },
         )
+
+    def check_static_demo_category(self, check: Check) -> CheckOutcome:
+        demo_paths: List[str] = []
+        demo_directories: List[str] = []
+        for rel in self.inventory.files:
+            parts = Path(rel).parts
+            if not parts:
+                continue
+            directories = [part.lower() for part in parts[:-1]]
+            stem = Path(parts[-1]).stem.lower()
+            if not any(part in DEMO_HINTS for part in directories) and stem not in DEMO_HINTS:
+                continue
+            demo_paths.append(rel)
+            for part in directories:
+                if part in DEMO_HINTS and part not in demo_directories:
+                    demo_directories.append(part)
+        demo_paths = sorted(demo_paths)[:20]
+        demo_directories = sorted(demo_directories)[:10]
+
+        demo_entrypoints = self._demo_entrypoints()
+
+        quickstart_docs: List[str] = []
+        for rel in sorted(self.inventory.files):
+            lower = rel.lower()
+            if not lower.endswith((".md", ".mdx", ".rst", ".txt")):
+                continue
+            if "readme" not in lower and "/docs/" not in "/" + lower:
+                continue
+            text = self._read(self.root / rel).lower()
+            if not text:
+                continue
+            if any(hint in text for hint in DEMO_DOC_HINTS):
+                quickstart_docs.append(rel)
+
+        payload = {
+            "category": "demo",
+            "intent": check.intent,
+            "expected": check.expected,
+            "source_available": self.inventory.available,
+            "source_files": len(self.inventory.source_files),
+            "manifests": len(self.inventory.manifests),
+            "demo_paths": demo_paths,
+            "demo_directories": demo_directories,
+            "demo_entrypoints": demo_entrypoints,
+            "quickstart_docs": quickstart_docs[:10],
+        }
+        evidence = self._save(
+            "demo-category-scope",
+            payload,
+            check,
+            "Demo category assessment scope, demo assets, and entry-point summary.",
+        )
+        return CheckOutcome(
+            status=CheckStatus.PASSED.value,
+            actual="Demo category assessment recorded with {} demo path(s), {} entry point(s), and {} documentation reference(s).".format(
+                len(demo_paths), len(demo_entrypoints), len(quickstart_docs)
+            ),
+            evidence=[evidence],
+            metadata={
+                "category": "demo",
+                "demo_paths": len(demo_paths),
+                "demo_entrypoints": len(demo_entrypoints),
+                "quickstart_docs": len(quickstart_docs),
+            },
+        )
+
+    def _demo_entrypoints(self) -> List[str]:
+        found: List[str] = []
+        package_json = self.root / "package.json"
+        if package_json.exists():
+            try:
+                data = json.loads(package_json.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            scripts = data.get("scripts") if isinstance(data, dict) else None
+            if isinstance(scripts, dict):
+                for name in sorted(scripts):
+                    if name in DEMO_SCRIPT_NAMES or name.startswith("demo:"):
+                        found.append("script:" + name)
+        makefile = self.root / "Makefile"
+        if makefile.exists():
+            for line in self._read(makefile).splitlines():
+                match = re.match(r"^([A-Za-z0-9_.-]+):(?!=)", line)
+                if match and match.group(1) in DEMO_SCRIPT_NAMES:
+                    found.append("make:" + match.group(1))
+        return sorted(set(found))[:10]
 
     def check_static_accessibility(self, check: Check) -> CheckOutcome:
         matches: List[Dict[str, Any]] = []

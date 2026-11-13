@@ -23,6 +23,7 @@ checks:
   - static.functionality_category
   - static.browser_category
   - static.issues_category
+  - static.demo_category
   - static.inventory
   - static.tests
   - static.ci
