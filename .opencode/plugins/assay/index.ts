@@ -38,6 +38,7 @@ function deliverUserReply(sessionID: string, text: string): boolean {
 
 import { browserInvocation, demoInvocation, extractUrl } from "./command-args.ts"
 import { buildBrowserAgentPrompt } from "./browser-agent-prompt.ts"
+import { registerJiraContextTool } from "./jira-context.ts"
 import { runAgentLoop } from "./agent.ts"
 import { browserEnv, runAssay } from "./runner.ts"
 
@@ -174,6 +175,14 @@ async function sendPrompt(ctx: any, sessionID: string, text: string, noReply = f
 export default Plugin.define({
   id: "assay",
   async setup(ctx: any) {
+    // Register the native Jira context tool before commands so the
+    // agent-driven /assay-browser flow can open the four-field form.
+    await registerJiraContextTool(ctx).catch((error: unknown) => {
+      process.stderr.write(
+        `[assay-agent] Jira context tool unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    })
+
     await ctx.command.transform((editor: any) => {
       editor.add({
         name: "assay",

@@ -41,6 +41,14 @@ test("context protocol requires the native question tool and forbids placeholder
   assert.match(CONTEXT_PROTOCOL, /one decision per question/)
 })
 
+test("context protocol routes Jira through the native four-field form tool", () => {
+  assert.match(CONTEXT_PROTOCOL, /Jira form/)
+  assert.match(CONTEXT_PROTOCOL, /assay_jira_context/)
+  assert.match(CONTEXT_PROTOCOL, /site, issue key, email, API token/)
+  assert.match(CONTEXT_PROTOCOL, /token is consumed by the tool in memory/i)
+  assert.match(CONTEXT_PROTOCOL, /do not ask the user to paste it into chat/i)
+})
+
 test("browser agent prompt embeds the target, command, and context flow", () => {
   const prompt = buildBrowserAgentPrompt(INPUT)
   assert.match(prompt, /https:\/\/testradius\.dev/)

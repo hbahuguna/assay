@@ -28,14 +28,18 @@ Sequential flow, one decision per question:
 
 1. **Source** — ask with options `Jira`, `Slack`, `GitHub`, `Doc`, `URL/Text`, `Skip`.
    - If `Skip`: record "context skipped" and continue with the next unique safe harness step.
-2. **Method** (only if a source was chosen) — ask with options `Paste` (recommended), `MCP`, `Secure env/secret ref`.
+2. **Method** (only if a source was chosen) — ask with options:
+   - **Jira only:** `Jira form` (recommended), `Paste`, `MCP`, `Secure env/secret ref`.
+   - **Other sources:** `Paste` (recommended), `MCP`, `Secure env/secret ref`.
+   - `Jira form` opens the native four-field Jira dialog (site, issue key, email, API token). It is preferred because the tool consumes the token in memory and does not return it to the model.
 3. **Collect details** (one question at a time):
+   - **Jira form:** call the `assay_jira_context` tool. It opens the native four-field form (site, issue key, email, API token) and returns only the redacted Jira issue context. Do not ask for the Jira token in prose and do not ask the user to paste it into chat. OpenCode keeps form answers in its local form store, so advise a scoped, revocable token and never repeat the token in summaries, logs, evidence, or reports. If the tool is unavailable, state the blocker, record the gap, and fall back to `Secure env/secret ref` or `Paste`.
    - **Paste:** ask the user to paste the relevant story/AC/thread/notes in the custom answer box. Redact secrets before storing, logging, or summarizing.
    - **MCP:** ask for the exact MCP server name and resource/identifier in the custom answer box. Confirm the resource before use.
-   - **Secure env/secret ref:** ask for the environment variable or secret reference name **only**. Never ask for or accept a raw token/secret. Include a `Skip` option if not configured. If the user pastes a raw secret/token anyway, do not store or echo it; ask them to provide an env/secret reference instead.
-4. **Identifier** — when relevant, ask for the specific ID/URL (Jira key/URL, Slack thread, GitHub issue/PR, doc URL) in a separate question.
+   - **Secure env/secret ref:** ask for the environment variable or secret reference name **only**. Never ask for or accept a raw token in prose. Include a `Skip` option if not configured. If the user pastes a raw secret/token anyway, do not store or echo it; ask them to provide an env/secret reference instead.
+4. **Identifier** — when relevant, ask for the specific ID/URL (Jira key/URL, Slack thread, GitHub issue/PR, doc URL) in a separate question. If `Jira form` was used, prefer the issue key/URL already collected by the form; do not ask again.
 5. **Confirm** — ask `Continue with the next unique safe harness step?` with options `Continue`, `Add another context source`, `Skip context`. If `Add another context source`, repeat from step 1.
-6. **Record a redacted decision** — source, method, identifier, short summary, and whether it was skipped. Never store secrets.
+6. **Record a redacted decision** — source, method, identifier, short summary, and whether it was skipped. Never store secrets, the Jira token, or any form answer containing it.
 7. **If the question tool is unavailable or errors**, state that blocker explicitly, record the gap, and continue with safe unique steps. Never simulate a user answer.
 
 Do not stop after asking a question. Wait for the tool result, consume the answer, and continue in the same session. The user must not need to rerun a command or restate the goal.
